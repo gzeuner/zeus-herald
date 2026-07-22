@@ -14,6 +14,7 @@ export { createApp, loadRuntimeOptions } from './app.js';
 export { BoundedQueue } from './queue.js';
 export { RuntimeSupervisor } from './runtimeSupervisor.js';
 export { createIngest, loadIngestConfig } from './ingest/index.js';
+export { createMotion, loadMotionConfig } from './motion/index.js';
 
 const isMain =
   process.argv[1] &&

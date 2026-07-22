@@ -1,8 +1,8 @@
 # ADR-006 – Motion event model and folder contract
 
-**Status:** Proposed  
+**Status:** Accepted  
 **Date:** 2026-07-22  
-**Deciders:** Architect (v0.2 planning)
+**Deciders:** Architect (package 06-motion implementation)
 
 ## Context
 
