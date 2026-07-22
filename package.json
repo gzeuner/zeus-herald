@@ -10,8 +10,10 @@
   "scripts": {
     "start": "node --env-file=.env src/index.js",
     "start:bare": "node src/index.js",
-    "test": "node scripts/check-banned-stack.mjs && node --test test/smoke.test.js test/config.test.js test/notifiers.test.js test/banned-stack.test.js test/runtime.test.js",
-    "lint": "node --check src/index.js src/config.js src/logger.js src/app.js src/queue.js src/runtimeSupervisor.js src/shutdown.js src/notifiers/base.js src/notifiers/telegram.js src/notifiers/ntfy.js src/notifiers/hub.js src/notifiers/index.js",
+    "ingest": "node --env-file=.env src/ingest-cli.js",
+    "ingest:once": "node --env-file=.env --input-type=module -e \"process.env.INGEST_ONCE='1';await import('./src/ingest-cli.js')\"",
+    "test": "node scripts/check-banned-stack.mjs && node --test test/smoke.test.js test/config.test.js test/notifiers.test.js test/banned-stack.test.js test/runtime.test.js test/ingest.test.js",
+    "lint": "node --check src/index.js src/config.js src/logger.js src/app.js src/queue.js src/runtimeSupervisor.js src/shutdown.js src/ingest-cli.js src/ingest/config.js src/ingest/reolink.js src/ingest/upcam.js src/ingest/writer.js src/ingest/index.js src/notifiers/base.js src/notifiers/telegram.js src/notifiers/ntfy.js src/notifiers/hub.js src/notifiers/index.js",
     "check:banned": "node scripts/check-banned-stack.mjs",
     "version:print": "node -e \"import{version}from'./src/index.js';console.log(version)\""
   },

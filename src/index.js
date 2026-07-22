@@ -13,6 +13,7 @@ export { logger, setRedactions } from './logger.js';
 export { createApp, loadRuntimeOptions } from './app.js';
 export { BoundedQueue } from './queue.js';
 export { RuntimeSupervisor } from './runtimeSupervisor.js';
+export { createIngest, loadIngestConfig } from './ingest/index.js';
 
 const isMain =
   process.argv[1] &&

@@ -1,8 +1,8 @@
 # ADR-005 – Ingest contract (HTTP snapshot sources)
 
-**Status:** Proposed  
+**Status:** Accepted  
 **Date:** 2026-07-22  
-**Deciders:** Architect (v0.2 planning)
+**Deciders:** Architect (package 05-ingest implementation)
 
 ## Context
 
