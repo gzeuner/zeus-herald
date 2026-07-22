@@ -10,8 +10,8 @@
   "scripts": {
     "start": "node --env-file=.env src/index.js",
     "start:bare": "node src/index.js",
-    "test": "node scripts/check-banned-stack.mjs && node --test test/smoke.test.js test/config.test.js test/notifiers.test.js test/banned-stack.test.js",
-    "lint": "node --check src/index.js src/config.js src/logger.js src/notifiers/base.js src/notifiers/telegram.js src/notifiers/ntfy.js src/notifiers/hub.js src/notifiers/index.js",
+    "test": "node scripts/check-banned-stack.mjs && node --test test/smoke.test.js test/config.test.js test/notifiers.test.js test/banned-stack.test.js test/runtime.test.js",
+    "lint": "node --check src/index.js src/config.js src/logger.js src/app.js src/queue.js src/runtimeSupervisor.js src/shutdown.js src/notifiers/base.js src/notifiers/telegram.js src/notifiers/ntfy.js src/notifiers/hub.js src/notifiers/index.js",
     "check:banned": "node scripts/check-banned-stack.mjs"
   },
   "keywords": [
