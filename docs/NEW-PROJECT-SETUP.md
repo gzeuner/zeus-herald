@@ -11,7 +11,7 @@
 ## Option B – New branch inside existing upcam-client
 
 ```bash
-cd C:\Java\workspace-java\upcam-client
+cd /path/to/upcam-client          # your local clone of the legacy repo
 git checkout -b zeus-herald
 # then copy scaffold files, adjust .gitignore, commit
 ```
@@ -19,7 +19,7 @@ git checkout -b zeus-herald
 ## Placing the roadmap into the legacy project
 
 ```bash
-# inside upcam-client
+# from your local upcam-client clone
 mkdir -p .local
 # copy .local/ROADMAP.md and ROADMAP-STATUS.md from this package
 # ensure .local/ is in .gitignore
