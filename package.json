@@ -1,0 +1,25 @@
+{
+  "name": "zeus-herald",
+  "version": "0.1.0",
+  "description": "Reliable camera event notifications via Telegram Bot and ntfy (successor to upcam-client / SnapShotter)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/**/*.test.js",
+    "lint": "node --check src/index.js"
+  },
+  "keywords": [
+    "telegram",
+    "ntfy",
+    "camera",
+    "notifications",
+    "zeus-herald"
+  ],
+  "author": "zeus-herald contributors",
+  "license": "MIT",
+  "private": true
+}
