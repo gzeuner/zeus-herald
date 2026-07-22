@@ -1,6 +1,6 @@
 {
   "name": "zeus-herald",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha",
   "description": "Reliable camera event notifications via Telegram Bot and ntfy (successor to upcam-client / SnapShotter)",
   "type": "module",
   "engines": {
@@ -14,7 +14,7 @@
     "ingest:once": "node --env-file=.env --input-type=module -e \"process.env.INGEST_ONCE='1';await import('./src/ingest-cli.js')\"",
     "motion": "node --env-file=.env src/motion-cli.js",
     "motion:once": "node --env-file=.env --input-type=module -e \"process.env.MOTION_ONCE='1';await import('./src/motion-cli.js')\"",
-    "test": "node scripts/check-banned-stack.mjs && node --test test/smoke.test.js test/config.test.js test/notifiers.test.js test/banned-stack.test.js test/runtime.test.js test/ingest.test.js test/motion.test.js",
+    "test": "node scripts/check-banned-stack.mjs && node --test test/smoke.test.js test/config.test.js test/notifiers.test.js test/banned-stack.test.js test/runtime.test.js test/ingest.test.js test/motion.test.js test/e2e-pipeline.test.js",
     "lint": "node --check src/index.js src/config.js src/logger.js src/app.js src/queue.js src/runtimeSupervisor.js src/shutdown.js src/ingest-cli.js src/ingest/config.js src/ingest/reolink.js src/ingest/upcam.js src/ingest/writer.js src/ingest/index.js src/motion-cli.js src/motion/config.js src/motion/metrics.js src/motion/state.js src/motion/decide.js src/motion/processor.js src/motion/index.js src/notifiers/base.js src/notifiers/telegram.js src/notifiers/ntfy.js src/notifiers/hub.js src/notifiers/index.js",
     "check:banned": "node scripts/check-banned-stack.mjs",
     "version:print": "node -e \"import{version}from'./src/index.js';console.log(version)\""

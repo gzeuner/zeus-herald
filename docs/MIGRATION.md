@@ -7,110 +7,132 @@
 | whatsapp-web.js + Puppeteer / Chromium | Telegram Bot API + ntfy HTTP only |
 | Session locks, QR pairing, browser recovery | Stateless HTTP notifiers |
 | High idle/memory cost | No headless browser; bounded queues |
-| Two-repo complexity for messaging | Single Node package for notifications |
+| Two-repo complexity for messaging | Single Node package for capture → decide → notify |
 
 Active feature work on upcam-client and SnapShotter is **discontinued**. See `docs/DISCONTINUATION.md`.
 
-## What v0.1.0 covers
+## What each version covers
 
-**Ready**
+### v0.1.0 (stable tag)
 
 - Pluggable notifiers (Telegram + ntfy)
-- Env-first config, secret redaction in logs
-- Bounded send queue, health file, heartbeat, graceful shutdown
-- Automated ban on WhatsApp/Puppeteer dependencies
+- Env-first config, secret redaction
+- Bounded send queue, health file, graceful shutdown
+- Ban on WhatsApp/Puppeteer dependencies
 
-**Not yet ported (use legacy ingest temporarily or wait)**
+### v0.2.0-alpha (current stack)
 
-- Java camera pull loop (upcam-client)
-- Full motion / zone / event state machine (SnapShotter)
-- Sample archive taxonomy and decision parity with legacy scores
+| Piece | Legacy | zeus-herald |
+|-------|--------|-------------|
+| Capture | upcam-client (Java) | `npm run ingest` (Node HTTP snapshot) |
+| Motion / events | SnapShotter | `npm run motion` (simplified confirm/cooldown/delta) |
+| Notify | WhatsApp Web | Telegram + ntfy hub |
+| Folders | received / filtered / sent (similar) | `images/received` → `filtered` \| `sent` |
 
-Recommended interim setup: keep **upcam-client** (or any process) writing JPEGs to a folder; call zeus-herald’s `enqueueNotify(path, caption)` from a small watcher script, or wait for a future ingest package.
+**Not full SnapShotter parity:** motion uses a coarse byte-sample delta (no Sharp/ML). Tune thresholds or extend metrics later.
+
+## Migration strategies
+
+### Strategy A – Full zeus-herald stack (recommended for greenfield)
+
+1. Install zeus-herald `@ v0.2.0-alpha` (or `main`).
+2. Configure `.env`: camera (`REOLINK_*`) + notifiers (`TELEGRAM_*` / `NTFY_URL`).
+3. Run **two processes**: `npm run ingest` and `npm run motion`.
+4. Stop SnapShotter WhatsApp and optional Java ingest when stable.
+
+### Strategy B – Keep Java ingest, replace SnapShotter notify
+
+1. Point upcam-client output at `images/received/` (or set `MOTION_RECEIVED_DIR`).
+2. Run only `npm run motion` (+ notifier env).
+3. Retire WhatsApp / Puppeteer path.
+
+### Strategy C – Notify bridge only (v0.1 style)
+
+1. External process decides “send”.
+2. Call `createApp().enqueueNotify(path, caption)`.
+3. No motion package required.
+
+### Strategy D – Ingest direct notify (skip motion)
+
+1. `INGEST_MODE=direct_notify` + notifier env.
+2. Every successful snapshot is enqueued (no cooldown/delta). Use only for tests or low-rate cameras.
 
 ## Side-by-side
 
-| Concern | SnapShotter | zeus-herald |
-|---------|-------------|-------------|
+| Concern | SnapShotter / upcam-client | zeus-herald v0.2-alpha |
+|---------|----------------------------|-------------------------|
 | Notify channel | WhatsApp Web | Telegram + ntfy |
 | Auth | QR / LocalAuth / `.wwebjs_auth` | Bot token + chat id; ntfy URL |
-| Config | `config.js` large tree | `.env` / `process.env` |
-| Health | RuntimeSupervisor + WA status | `state/health.json` |
+| Config | large `config.js` / Java props | `.env` / `process.env` |
+| Health | RuntimeSupervisor + WA status | `state/health.json` + `.decision.json` |
 | Shutdown | Browser kill + locks | SIGINT/SIGTERM queue drain |
+| Motion | Full detector + zones model | Simplified delta + confirm/cooldown |
 
-## Step-by-step
+## Step-by-step (full stack)
 
-### 1. Create Telegram bot (if using Telegram)
+### 1. Notifier credentials
 
-1. Talk to [@BotFather](https://t.me/BotFather) → create bot → copy token.
-2. Send a message to the bot (or add it to a group).
-3. Resolve `chat_id` (e.g. `https://api.telegram.org/bot<token>/getUpdates`).
-4. Put values in `.env` as `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
+**Telegram:** BotFather → token; resolve `chat_id` via `getUpdates`.  
+**ntfy:** secret topic URL; optional `NTFY_TOKEN`.
 
-### 2. Create ntfy topic (if using ntfy)
+### 2. Camera
 
-1. Choose a hard-to-guess topic name on [ntfy.sh](https://ntfy.sh) or your server.
-2. Set `NTFY_URL=https://ntfy.sh/<topic>` (or self-hosted URL).
-3. Optional: `NTFY_TOKEN` for authenticated servers.
-4. Subscribe with the ntfy app or web UI.
+Prefer `REOLINK_SNAPSHOT_URL` if you already know the Snap CGI URL, else:
 
-### 3. Install zeus-herald
+```env
+CAMERA_TYPE=reolink
+REOLINK_HOST=192.168.x.x
+REOLINK_USER=admin
+REOLINK_PASSWORD=...
+REOLINK_CHANNEL=0
+```
+
+### 3. Install
 
 ```bash
-git clone <your-zeus-herald-url>
+git clone https://github.com/gzeuner/zeus-herald.git
 cd zeus-herald
-git checkout v0.1.0   # or main
+git checkout v0.2.0-alpha
 cp .env.example .env
 # fill credentials
 npm test
-npm start
 ```
 
-### 4. Smoke-send an image
-
-From a one-off script (with env loaded):
+### 4. Run
 
 ```bash
-node --env-file=.env -e "
-import { createApp } from './src/app.js';
-const app = createApp({ installSignals: false });
-await app.start();
-console.log(await app.enqueueNotify('path/to.jpg', 'migration test'));
-await app.stop();
-"
+npm run ingest    # → images/received/
+npm run motion    # → filtered/ or sent/ + notify
 ```
 
-### 5. Retire WhatsApp path
+### 5. Retire legacy
 
 1. Stop SnapShotter processes.
-2. Do **not** copy `.wwebjs_auth` into zeus-herald (ignored and banned).
-3. Remove WhatsApp-related secrets from shared env files if unused.
-4. Keep legacy repos for archive; they point here via README notice.
+2. Do **not** copy `.wwebjs_auth` into zeus-herald.
+3. Optionally keep upcam-client as producer only (Strategy B) until Node ingest is trusted.
 
-### 6. Optional: run both during transition
+## Config mapping (approximate)
 
-- upcam-client continues writing `images/received/`.
-- SnapShotter WhatsApp disabled / stopped.
-- zeus-herald sends on accepted frames once your bridge/watcher calls `enqueueNotify`.
-
-## Configuration mapping (approximate)
-
-| SnapShotter / old idea | zeus-herald |
-|------------------------|-------------|
-| WhatsApp target | `TELEGRAM_CHAT_ID` or `NTFY_URL` |
-| Send timeout | `NOTIFIER_TIMEOUT_MS` |
-| Back-pressure | `QUEUE_MAX_SIZE`, `QUEUE_DROP_POLICY` |
-| Health / observability | `HEALTH_FILE`, `HEARTBEAT_MS`, `DECISION_LOG` |
+| Legacy idea | zeus-herald |
+|-------------|-------------|
+| WhatsApp target | `TELEGRAM_CHAT_ID` / `NTFY_URL` |
+| Snapshot poll | `INGEST_INTERVAL_MS` + Reolink URL |
+| Motion threshold | `MOTION_SCORE_THRESHOLD`, `MOTION_PIXEL_DIFF_THRESHOLD` |
+| Cooldown | `MOTION_COOLDOWN_MS` |
+| Max alerts | `MOTION_MAX_SENDS` |
+| Confirm frames | `MOTION_CONFIRM_COUNT` |
+| Health | `HEALTH_FILE`, decision sidecars |
 
 ## Verification checklist
 
-- [ ] `npm test` green
+- [ ] `npm test` green (includes e2e mock pipeline)
 - [ ] `npm run check:banned` OK
 - [ ] Test image arrives on Telegram and/or ntfy
-- [ ] `state/health.json` updates while `npm start` runs
-- [ ] SIGINT stops cleanly without orphan Chromium (there is none)
+- [ ] Ingest writes under `images/received/` with optional `.json`
+- [ ] Motion routes baseline/static to `filtered/`, change to `sent/`
+- [ ] SIGINT stops cleanly; no Chromium process
 
 ## Support boundary
 
 zeus-herald will not reintroduce WhatsApp Web or Puppeteer.  
-If you need that stack, remain on the frozen legacy code at your own risk.
+If you need that stack, remain on frozen legacy code at your own risk.

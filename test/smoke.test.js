@@ -4,5 +4,6 @@ import { version } from '../src/index.js';
 
 test('foundation exports a version string', () => {
   assert.equal(typeof version, 'string');
-  assert.match(version, /^\d+\.\d+\.\d+$/);
+  // semver core or prerelease (e.g. 0.2.0-alpha)
+  assert.match(version, /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
 });
