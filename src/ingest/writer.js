@@ -9,6 +9,8 @@ import { randomBytes } from 'node:crypto';
  * @property {string} source
  * @property {string} path
  * @property {string} [requestId]
+ * @property {number} [burstIndex]
+ * @property {number} [burstCount]
  */
 
 /**
@@ -20,6 +22,7 @@ import { randomBytes } from 'node:crypto';
  * @param {string} [options.contentType]
  * @param {boolean} [options.writeMetadata]
  * @param {string} [options.requestId]
+ * @param {Record<string, unknown>} [options.extraMetadata]
  * @param {Date} [options.now]
  * @returns {Promise<{ imagePath: string, metadataPath: string | null, metadata: IngestMetadata }>}
  */
@@ -32,6 +35,7 @@ export async function writeReceivedFrame(options) {
     contentType = 'image/jpeg',
     writeMetadata = true,
     requestId,
+    extraMetadata = {},
     now = new Date(),
   } = options;
 
@@ -54,6 +58,7 @@ export async function writeReceivedFrame(options) {
     source,
     path: imagePath,
     requestId,
+    ...extraMetadata,
   };
 
   let metadataPath = null;

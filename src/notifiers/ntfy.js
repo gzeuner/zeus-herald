@@ -11,6 +11,7 @@ import {
  * @param {string} options.url - full ntfy topic URL
  * @param {string} [options.token] - optional bearer token for self-hosted auth
  * @param {number} [options.timeoutMs]
+ * @param {import('./base.js').ImageCompressionOptions} [options.imageCompression]
  * @param {typeof fetch} [options.fetchImpl]
  */
 export function createNtfyNotifier(options) {
@@ -18,6 +19,7 @@ export function createNtfyNotifier(options) {
     url,
     token = '',
     timeoutMs = 30000,
+    imageCompression = {},
     fetchImpl = globalThis.fetch,
   } = options;
 
@@ -46,7 +48,7 @@ export function createNtfyNotifier(options) {
     const started = Date.now();
     const timeout = createTimeout(timeoutMs);
     try {
-      const { buffer, filename, contentType } = await loadImageFile(payload.imagePath);
+      const { buffer, filename, contentType } = await loadImageFile(payload.imagePath, imageCompression);
       const caption = truncateCaption(payload.caption, 4096);
       const title =
         (payload.metadata && typeof payload.metadata.title === 'string'
@@ -128,3 +130,4 @@ export function createNtfyNotifier(options) {
 
   return { name, send, health };
 }
+

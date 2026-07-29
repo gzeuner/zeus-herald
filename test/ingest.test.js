@@ -1,10 +1,14 @@
-import { test, describe } from 'node:test';
+﻿import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { loadIngestConfig } from '../src/ingest/config.js';
-import { buildReolinkSnapshotUrl, fetchReolinkSnapshot } from '../src/ingest/reolink.js';
+import {
+  buildReolinkSnapshotUrl,
+  fetchReolinkSnapshot,
+  fetchReolinkSnapshots,
+} from '../src/ingest/reolink.js';
 import { buildUpcamSnapshotUrl, fetchUpcamSnapshot } from '../src/ingest/upcam.js';
 import { writeReceivedFrame } from '../src/ingest/writer.js';
 import { createIngest } from '../src/ingest/index.js';
@@ -31,21 +35,56 @@ describe('ingest config', () => {
     const cfg = loadIngestConfig({ INGEST_MODE: 'direct_notify' });
     assert.equal(cfg.mode, 'direct_notify');
   });
+
+  test('parses legacy Reolink burst and path settings', () => {
+    const cfg = loadIngestConfig({
+      REOLINK_HOST: '192.0.2.10',
+      REOLINK_HTTP_PORT: '8080',
+      REOLINK_SNAPSHOT_PATH: '/snap?rs={timestamp}',
+      REOLINK_BURST_ENABLED: 'true',
+      REOLINK_BURST_COUNT: '2',
+      REOLINK_BURST_INTERVAL_MS: '350',
+    });
+    assert.equal(cfg.reolink.host, '192.0.2.10');
+    assert.equal(cfg.reolink.httpPort, 8080);
+    assert.equal(cfg.reolink.snapshotPath, '/snap?rs={timestamp}');
+    assert.equal(cfg.reolink.burst.enabled, true);
+    assert.equal(cfg.reolink.burst.count, 2);
+    assert.equal(cfg.reolink.burst.intervalMs, 350);
+  });
 });
 
 describe('reolink / upcam clients', () => {
   test('buildReolinkSnapshotUrl from host', () => {
     const url = buildReolinkSnapshotUrl({
       host: '192.168.1.50',
+      httpPort: 80,
       user: 'admin',
       password: 'secret',
       channel: '0',
       snapshotUrl: '',
-    });
+    }, { timestamp: 'fixed' });
     assert.match(url, /^http:\/\/192\.168\.1\.50\/cgi-bin\/api\.cgi/);
     assert.match(url, /cmd=Snap/);
     assert.match(url, /user=admin/);
+    assert.match(url, /rs=fixed/);
     assert.ok(!url.includes('secret') || url.includes('password=secret'));
+  });
+
+  test('buildReolinkSnapshotUrl supports legacy path template and HTTP port', () => {
+    const url = buildReolinkSnapshotUrl({
+      host: '192.168.1.50',
+      httpPort: 8080,
+      user: 'zeus user',
+      password: 'p#s',
+      channel: '0',
+      snapshotUrl: '',
+      snapshotPath: '/cgi-bin/api.cgi?cmd=Snap&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}',
+    }, { timestamp: '123' });
+    assert.equal(
+      url,
+      'http://192.168.1.50:8080/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=123&user=zeus%20user&password=p%23s',
+    );
   });
 
   test('fetchReolinkSnapshot success with mock fetch', async () => {
@@ -75,6 +114,37 @@ describe('reolink / upcam clients', () => {
     assert.ok(buffer.length >= 100);
   });
 
+  test('fetchReolinkSnapshots captures configured burst', async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'image/jpeg' },
+        arrayBuffer: async () => FAKE_JPEG.buffer.slice(
+          FAKE_JPEG.byteOffset,
+          FAKE_JPEG.byteOffset + FAKE_JPEG.byteLength,
+        ),
+      };
+    };
+    const frames = await fetchReolinkSnapshots({
+      config: {
+        snapshotUrl: 'http://cam/snap?rs={timestamp}',
+        host: '',
+        user: '',
+        password: '',
+        channel: '0',
+        burst: { enabled: true, count: 2, intervalMs: 1 },
+      },
+      fetchImpl,
+    });
+    assert.equal(calls, 2);
+    assert.equal(frames.length, 2);
+    assert.equal(frames[0].burstIndex, 1);
+    assert.equal(frames[1].burstCount, 2);
+  });
+
   test('fetchReolinkSnapshot maps HTTP error', async () => {
     const fetchImpl = async () => ({
       ok: false,
@@ -95,6 +165,32 @@ describe('reolink / upcam clients', () => {
           fetchImpl,
         }),
       /reolink_http_401|401/,
+    );
+  });
+  test('fetchReolinkSnapshot rejects Reolink JSON error bodies', async () => {
+    const payload = JSON.stringify([
+      { cmd: 'Snap', code: 1, error: { detail: 'login failed', rspCode: -7 } },
+    ]);
+    const body = Buffer.from(`${payload}${' '.repeat(160)}`);
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+    });
+    await assert.rejects(
+      () =>
+        fetchReolinkSnapshot({
+          config: {
+            snapshotUrl: 'http://cam/snap',
+            host: '',
+            user: '',
+            password: '',
+            channel: '0',
+          },
+          fetchImpl,
+        }),
+      /reolink_non_image_response:login failed/,
     );
   });
 
@@ -140,6 +236,7 @@ describe('writer', () => {
         buffer: FAKE_JPEG,
         writeMetadata: true,
         requestId: 'req-1',
+        extraMetadata: { burstIndex: 1, burstCount: 2 },
       });
       const img = await readFile(result.imagePath);
       assert.ok(img.length >= 100);
@@ -148,6 +245,8 @@ describe('writer', () => {
       assert.equal(meta.camera, 'front');
       assert.equal(meta.source, 'reolink');
       assert.equal(meta.requestId, 'req-1');
+      assert.equal(meta.burstIndex, 1);
+      assert.equal(meta.burstCount, 2);
       assert.ok(meta.capturedAt);
       assert.equal(meta.path, result.imagePath);
     } finally {
@@ -236,3 +335,7 @@ describe('createIngest integration', () => {
     }
   });
 });
+
+
+
+

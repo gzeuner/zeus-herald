@@ -7,6 +7,8 @@ import { loadMotionConfig } from '../src/motion/config.js';
 import { MotionEventState } from '../src/motion/state.js';
 import { decideFrame } from '../src/motion/decide.js';
 import { createMotion } from '../src/motion/index.js';
+import jpeg from 'jpeg-js';
+import { computeFrameMetrics } from '../src/motion/metrics.js';
 
 function solidBuffer(byte, size = 4096) {
   return Buffer.alloc(size, byte);
@@ -18,6 +20,20 @@ describe('motion config', () => {
     assert.equal(cfg.receivedDir, 'images/received');
     assert.equal(cfg.confirmCount, 1);
     assert.ok(cfg.cooldownMs > 0);
+    assert.equal(cfg.imageDecodeEnabled, true);
+  });
+
+  test('parses image decode resize crop and ROI polygons', () => {
+    const cfg = loadMotionConfig({
+      MOTION_IMAGE_DECODE_ENABLED: 'true',
+      MOTION_RESIZE_WIDTH: '384',
+      MOTION_CROP_TOP_PX: '24',
+      MOTION_ROI_POLYGONS_JSON: '[[{"x":0,"y":0},{"x":10,"y":0},{"x":0,"y":10}]]',
+    });
+    assert.equal(cfg.resizeWidth, 384);
+    assert.equal(cfg.cropTopPx, 24);
+    assert.equal(cfg.roiPolygons.length, 1);
+    assert.equal(cfg.roiPolygons[0].length, 3);
   });
 });
 
@@ -141,6 +157,44 @@ describe('decideFrame', () => {
   });
 });
 
+
+describe('image pixel metrics', () => {
+  function jpegBuffer(width, height, fill) {
+    const data = Buffer.alloc(width * height * 4);
+    for (let i = 0; i < width * height; i += 1) {
+      data[i * 4] = fill(i, 'r');
+      data[i * 4 + 1] = fill(i, 'g');
+      data[i * 4 + 2] = fill(i, 'b');
+      data[i * 4 + 3] = 255;
+    }
+    return jpeg.encode({ data, width, height }, 90).data;
+  }
+
+  test('decodes JPEG, resizes, applies ROI, and compares pixels', () => {
+    const cfg = loadMotionConfig({
+      MOTION_RESIZE_WIDTH: '8',
+      MOTION_CROP_TOP_PX: '0',
+      MOTION_PIXEL_DIFF_THRESHOLD: '20',
+      MOTION_SCORE_THRESHOLD: '0.01',
+      MOTION_BRIGHTNESS_MIN: '1',
+      MOTION_BRIGHTNESS_MAX: '254',
+      MOTION_ROI_POLYGONS_JSON: '[[{"x":0,"y":0},{"x":4,"y":0},{"x":4,"y":8},{"x":0,"y":8}]]',
+    });
+    const first = jpegBuffer(8, 8, () => 80);
+    const second = jpegBuffer(8, 8, (i) => (i % 8 < 4 ? 180 : 80));
+
+    const a = computeFrameMetrics(first, cfg, null);
+    const b = computeFrameMetrics(second, cfg, a.samples);
+
+    assert.equal(a.mode, 'image');
+    assert.equal(a.image.width, 8);
+    assert.equal(a.image.roiPixels, 32);
+    assert.ok(a.image.maskedOut > 0);
+    assert.ok(b.score > 0.8);
+    assert.equal(b.changed, b.compared);
+  });
+});
+
 describe('createMotion folder routing', () => {
   test('filters baseline and no_delta; sends motion with mock notify', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'zeus-motion-'));
@@ -256,3 +310,4 @@ describe('createMotion folder routing', () => {
     }
   });
 });
+

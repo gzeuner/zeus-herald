@@ -3,7 +3,7 @@
  */
 
 import { loadIngestConfig, ingestSecretValues } from './config.js';
-import { fetchReolinkSnapshot } from './reolink.js';
+import { fetchReolinkSnapshots } from './reolink.js';
 import { fetchUpcamSnapshot } from './upcam.js';
 import { writeReceivedFrame } from './writer.js';
 import { logger, setRedactions } from '../logger.js';
@@ -11,7 +11,7 @@ import { createApp } from '../app.js';
 
 export { loadIngestConfig, ingestSecretValues } from './config.js';
 export { writeReceivedFrame } from './writer.js';
-export { buildReolinkSnapshotUrl, fetchReolinkSnapshot } from './reolink.js';
+export { buildReolinkSnapshotUrl, fetchReolinkSnapshot, fetchReolinkSnapshots } from './reolink.js';
 export { buildUpcamSnapshotUrl, fetchUpcamSnapshot } from './upcam.js';
 
 /**
@@ -50,63 +50,78 @@ export function createIngest(options = {}) {
    */
   async function captureOnce(requestId) {
     const source = config.cameraType;
-    let buffer;
-    let contentType;
-
-    if (source === 'reolink') {
-      ({ buffer, contentType } = await fetchReolinkSnapshot({
-        config: config.reolink,
-        timeoutMs: config.timeoutMs,
-        fetchImpl,
-      }));
-    } else {
-      ({ buffer, contentType } = await fetchUpcamSnapshot({
-        config: config.upcam,
-        timeoutMs: config.timeoutMs,
-        fetchImpl,
-      }));
-    }
-
-    const written = await writeReceivedFrame({
-      targetDir: config.targetDir,
-      cameraId: config.cameraId,
-      source,
-      buffer,
-      contentType,
-      writeMetadata: config.writeMetadata,
-      requestId,
-    });
-
-    logger.info('ingest_frame_written', {
-      camera: config.cameraId,
-      source,
-      path: written.imagePath,
-      bytes: buffer.length,
-      mode: config.mode,
-    });
-
-    if (config.mode === 'direct_notify') {
-      if (!app) {
-        app = createApp({
-          env,
+    const frames = source === 'reolink'
+      ? await fetchReolinkSnapshots({
+          config: config.reolink,
+          timeoutMs: config.timeoutMs,
           fetchImpl,
-          installSignals: options.installSignals === true,
-        });
-        await app.start();
-      }
-      const caption = `${config.cameraId} ${written.metadata.capturedAt}`;
-      const outcome = await app.enqueueNotify(written.imagePath, caption, {
-        ...written.metadata,
-        title: config.cameraId,
+        })
+      : [
+          {
+            ...(await fetchUpcamSnapshot({
+              config: config.upcam,
+              timeoutMs: config.timeoutMs,
+              fetchImpl,
+            })),
+            burstIndex: 1,
+            burstCount: 1,
+          },
+        ];
+
+    const writtenFrames = [];
+    for (const frame of frames) {
+      const frameRequestId = frame.burstCount > 1 && requestId
+        ? `${requestId}:${frame.burstIndex}`
+        : requestId;
+      const written = await writeReceivedFrame({
+        targetDir: config.targetDir,
+        cameraId: config.cameraId,
+        source,
+        buffer: frame.buffer,
+        contentType: frame.contentType,
+        writeMetadata: config.writeMetadata,
+        requestId: frameRequestId,
+        extraMetadata: frame.burstCount > 1
+          ? { burstIndex: frame.burstIndex, burstCount: frame.burstCount }
+          : {},
       });
-      logger.info('ingest_direct_notify', {
-        ok: outcome.ok,
+
+      logger.info('ingest_frame_written', {
+        camera: config.cameraId,
+        source,
         path: written.imagePath,
+        bytes: frame.buffer.length,
+        mode: config.mode,
+        burstIndex: frame.burstIndex,
+        burstCount: frame.burstCount,
       });
-      return { ...written, notify: outcome };
+
+      if (config.mode === 'direct_notify') {
+        if (!app) {
+          app = createApp({
+            env,
+            fetchImpl,
+            installSignals: options.installSignals === true,
+          });
+          await app.start();
+        }
+        const caption = `${config.cameraId} ${written.metadata.capturedAt}`;
+        const outcome = await app.enqueueNotify(written.imagePath, caption, {
+          ...written.metadata,
+          title: config.cameraId,
+        });
+        logger.info('ingest_direct_notify', {
+          ok: outcome.ok,
+          path: written.imagePath,
+        });
+        writtenFrames.push({ ...written, notify: outcome });
+      } else {
+        writtenFrames.push({ ...written, notify: null });
+      }
     }
 
-    return { ...written, notify: null };
+    if (writtenFrames.length === 1) return writtenFrames[0];
+    return { frames: writtenFrames, notify: null };
   }
 
   function scheduleNext() {

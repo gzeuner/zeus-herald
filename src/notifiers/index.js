@@ -6,5 +6,7 @@ export {
   safeErrorMessage,
   createTimeout,
   loadImageFile,
+  compressJpeg,
   truncateCaption,
 } from './base.js';
+

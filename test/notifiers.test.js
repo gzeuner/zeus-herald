@@ -8,11 +8,25 @@ import { createNtfyNotifier } from '../src/notifiers/ntfy.js';
 import { createNotifiers, createNotifierHub } from '../src/notifiers/hub.js';
 import { loadConfig } from '../src/config.js';
 import { redact, setRedactions } from '../src/logger.js';
-import { truncateCaption } from '../src/notifiers/base.js';
+import { loadImageFile, truncateCaption } from '../src/notifiers/base.js';
+import jpeg from 'jpeg-js';
 
 /** minimal JPEG-ish bytes (not a real image, but file present for upload path) */
 const FAKE_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9, 0x00, 0x01, 0x02, 0x03]);
 
+
+function realJpeg(width, height) {
+  const data = Buffer.alloc(width * height * 4);
+  for (let i = 0; i < width * height; i += 1) {
+    const x = i % width;
+    const y = Math.floor(i / width);
+    data[i * 4] = (x * 7) % 256;
+    data[i * 4 + 1] = (y * 11) % 256;
+    data[i * 4 + 2] = ((x + y) * 5) % 256;
+    data[i * 4 + 3] = 255;
+  }
+  return jpeg.encode({ data, width, height }, 90).data;
+}
 async function withTempImage(fn) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'zeus-herald-'));
   const imagePath = path.join(dir, 'shot.jpg');
@@ -194,8 +208,29 @@ describe('security helpers', () => {
     );
   });
 
+
+  test('loadImageFile compresses JPEG before notifier upload', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'zeus-compress-'));
+    try {
+      const imagePath = path.join(dir, 'large.jpg');
+      await writeFile(imagePath, realJpeg(1600, 900));
+      const original = await loadImageFile(imagePath, { enabled: false });
+      const compressed = await loadImageFile(imagePath, {
+        enabled: true,
+        maxWidth: 640,
+        jpegQuality: 60,
+      });
+      assert.equal(compressed.contentType, 'image/jpeg');
+      assert.equal(compressed.compressed, true);
+      assert.ok(compressed.buffer.length < original.buffer.length);
+      assert.equal(compressed.originalBytes, original.buffer.length);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   test('truncateCaption respects limit', () => {
     const long = 'x'.repeat(2000);
     assert.equal(truncateCaption(long, 10).length, 10);
   });
 });
+
