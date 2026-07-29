@@ -1,218 +1,342 @@
-# zeus-herald
+﻿# zeus-herald
 
-**Successor to upcam-client + SnapShotter**
+Local camera snapshots -> pixel motion filter -> mobile notifications via Telegram and/or ntfy.
 
-Local camera events → motion filter → reliable multi-channel notifications via **Telegram Bot** and **ntfy**.
+zeus-herald replaces the old `upcam-client` / SnapShotter workflow without WhatsApp Web, Puppeteer, Chromium, or browser session handling.
 
-> **Status:** **v0.2.0-alpha** – ingest + motion + notifier hub.  
-> No WhatsApp, no Puppeteer, no browser automation.
+## Security
 
-![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)
-![License](https://img.shields.io/badge/License-MIT-green)
-![Notifiers](https://img.shields.io/badge/notifiers-Telegram%20%7C%20ntfy-blue)
-
-## Design goals
-
-- Maximum reliability, minimum maintenance
-- Official APIs only (Telegram Bot API, ntfy HTTP)
-- Pluggable notifiers, bounded queues, health file, graceful shutdown
-- Secrets only via environment / `.env` (never committed)
-- Multi-agent development protocol under `agents/`
+- Keep `.env` private. Do not commit or push it.
+- Use `.env.example` only as the neutral template.
+- `images/`, `state/`, `logs/`, `.lock/`, and `.env*` are ignored by git.
+- Do not put camera passwords, bot tokens, chat ids, private ntfy topics, or real LAN camera addresses into documentation or commits.
 
 ## Pipeline
 
-```
-IP Camera (Reolink / UpCam)
-        ↓
-[ npm run ingest ]  HTTP snapshot
-        ↓
-images/received/  (+ optional .json metadata)
-        ↓
-[ npm run motion ]  Decision { send, reason, metrics }
-        ├── send:false → images/filtered/
-        └── send:true  → Notifier Hub → images/sent/
-                              ├── Telegram Bot
-                              └── ntfy
+```text
+Reolink camera
+  -> npm run ingest
+  -> images/received/
+  -> npm run motion
+  -> pixel decode, resize, crop, ROI mask, frame delta
+  -> images/filtered/ or images/sent/
+  -> notifier hub
+  -> Telegram, ntfy, or both
 ```
 
-| Mode | How |
-|------|-----|
-| **Full stack** | `ingest` writes `received/` · `motion` decides · hub notifies |
-| **Ingest only** | `INGEST_MODE=files_only` (default) or `direct_notify` skips motion |
-| **Motion only** | Drop JPEGs into `images/received/` (or any folder via env) |
-| **Notify only** | `createApp().enqueueNotify(path, caption)` |
+Motion detection runs once. Telegram and ntfy use the same accepted frames and the same compressed upload bytes; only the communication channel differs.
 
 ## Requirements
 
-- Node.js **20+**
-- For live notify: Telegram and/or ntfy credentials
-- For live ingest: Reolink snapshot URL/host (or UpCam)
+- Node.js 20+
+- A Reolink camera reachable from this machine
+- Optional mobile clients:
+  - Telegram app for Telegram Bot notifications
+  - ntfy app for ntfy notifications
 
 ## Install
 
 ```bash
 git clone https://github.com/gzeuner/zeus-herald.git
 cd zeus-herald
-git checkout v0.2.0-alpha   # or main
+npm install
 cp .env.example .env
-# edit .env
+```
+
+Edit `.env` locally. Never commit it.
+
+Run the verification suite:
+
+```bash
+npm run lint
 npm test
 ```
 
-## Quick paths
+## Camera Setup
 
-### A) Notify-only smoke
+Use a neutral Reolink profile like this in local `.env` and replace placeholders only on your machine:
 
-```bash
-# .env: TELEGRAM_* and/or NTFY_URL
-npm start
-# other terminal / script:
-node --env-file=.env --input-type=module -e "
-import { createApp } from './src/app.js';
-const app = createApp({ installSignals: false });
-await app.start();
-console.log(await app.enqueueNotify('path/to.jpg', 'hello'));
-await app.stop();
-"
+```env
+CAMERA_TYPE=reolink
+CAMERA_ID=front
+INGEST_MODE=files_only
+INGEST_TARGET_DIR=images/received
+INGEST_INTERVAL_MS=3000
+INGEST_TIMEOUT_MS=15000
+
+REOLINK_HOST=<camera-host-or-ip>
+REOLINK_HTTP_PORT=80
+REOLINK_USER=<camera-user>
+REOLINK_PASSWORD=<camera-password>
+REOLINK_CHANNEL=0
+REOLINK_SNAPSHOT_PATH=/cgi-bin/api.cgi?cmd=Snap&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}
+
+REOLINK_BURST_ENABLED=true
+REOLINK_BURST_COUNT=2
+REOLINK_BURST_INTERVAL_MS=350
+REOLINK_BURST_REQUIRE_SIGNAL=false
 ```
 
-### B) Full stack (two processes)
+If your password contains `#`, wrap it in quotes in `.env`:
+
+```env
+REOLINK_PASSWORD="your#password"
+```
+
+Quick camera test:
 
 ```bash
-# .env: REOLINK_* or REOLINK_SNAPSHOT_URL, TELEGRAM_* and/or NTFY_URL
-# optional tune: MOTION_SCORE_THRESHOLD, MOTION_COOLDOWN_MS, …
+npm run ingest:once
+```
 
-# terminal 1 – capture
+Expected result: a JPEG appears under `images/received/`. Invalid Reolink JSON/API responses are rejected and not stored as JPEGs.
+
+## Motion Setup
+
+The Reolink path decodes JPEGs, resizes them, crops the camera overlay area, applies optional ROI polygons, and compares grayscale pixels. This avoids false positives from JPEG byte-stream changes.
+
+Recommended starting values:
+
+```env
+MOTION_RECEIVED_DIR=images/received
+MOTION_FILTERED_DIR=images/filtered
+MOTION_SENT_DIR=images/sent
+MOTION_NOTIFY=true
+
+MOTION_IMAGE_DECODE_ENABLED=true
+MOTION_RESIZE_WIDTH=384
+MOTION_CROP_TOP_PX=24
+MOTION_PIXEL_DIFF_THRESHOLD=17
+MOTION_SCORE_THRESHOLD=0.08
+MOTION_CONFIRM_COUNT=3
+MOTION_COOLDOWN_MS=9000
+MOTION_MAX_SENDS=4
+```
+
+The ROI polygons from the old camera profile are available in `.env.example` as `MOTION_ROI_POLYGONS_JSON`. They should be validated against real Reolink frames before further tuning.
+
+## Mobile Clients
+
+### Telegram
+
+Install and authenticate:
+
+1. Install Telegram on the phone.
+2. Open `@BotFather` in Telegram.
+3. Create a bot with `/newbot`.
+4. Store the bot token only in local `.env` as `TELEGRAM_BOT_TOKEN`.
+5. Open a chat with the new bot and send `/start`.
+6. Resolve the chat id with `npm run telegram:chat-id`.
+7. Store the chat id only in local `.env` as `TELEGRAM_CHAT_ID`.
+
+Local `.env`:
+
+```env
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=<telegram-bot-token>
+TELEGRAM_CHAT_ID=<telegram-chat-id>
+```
+
+### ntfy
+
+Install and authenticate:
+
+1. Install the ntfy app on the phone.
+2. Choose a long, private topic name.
+3. Subscribe to that topic in the phone app.
+4. Store the topic URL only in local `.env` as `NTFY_URL`.
+
+Local `.env` for public `ntfy.sh`:
+
+```env
+NTFY_ENABLED=true
+NTFY_URL=https://ntfy.sh/<long-private-topic>
+```
+
+Public `ntfy.sh` topics do not require account authentication. The topic name is the shared secret. For real authentication, use a private/self-hosted ntfy server and set:
+
+```env
+NTFY_TOKEN=<bearer-token>
+```
+
+### Shared Family Chat
+
+For you and your wife, use a private Telegram group:
+
+1. Create a private Telegram group.
+2. Invite your wife.
+3. Invite the bot.
+4. Send a message in the group, for example `/start`.
+5. Run `npm run telegram:chat-id`.
+6. Copy the negative group id into local `.env` as `TELEGRAM_CHAT_ID`.
+7. Optional hardening: in `@BotFather`, run `/setjoingroups` and disable future group joins after the bot is already in this group.
+
+The helper prints chat ids only. It does not print the bot token.
+
+### Enable One Or Both
+
+- Telegram only: configure `TELEGRAM_*`, leave `NTFY_ENABLED=false` or `NTFY_URL` empty.
+- ntfy only: configure `NTFY_URL`, leave `TELEGRAM_ENABLED=false` or Telegram values empty.
+- Both: configure both. Every accepted motion event is sent to both.
+
+## Image Compression
+
+Images are compressed centrally before upload to either notifier.
+
+```env
+NOTIFIER_IMAGE_COMPRESSION_ENABLED=true
+NOTIFIER_IMAGE_MAX_WIDTH=1280
+NOTIFIER_IMAGE_JPEG_QUALITY=72
+```
+
+If compression fails, the notifier falls back to the original image so notification delivery is not blocked by the encoder.
+
+## Run
+
+Use two processes for the full stack:
+
+```bash
 npm run ingest
+```
 
-# terminal 2 – decide + notify
+```bash
 npm run motion
 ```
 
 Single-shot helpers:
 
 ```bash
-INGEST_ONCE=1 npm run ingest
-MOTION_ONCE=1 npm run motion
+npm run ingest:once
+npm run motion:once
+npm run notify:latest
 ```
 
-### C) Motion on fixtures (no camera)
+Process locks prevent duplicate ingest or motion workers from running at the same time. Stop with `Ctrl+C`.
+
+## Notify Smoke Test
+
+Send the newest image from `NOTIFY_LATEST_DIR`:
 
 ```bash
-# copy two different JPEGs into images/received/
-# first establishes baseline; second with real change may send
-MOTION_ONCE=1 npm run motion
+npm run notify:latest
 ```
 
-## Environment variables (summary)
+Send an explicit image:
 
-### Notifiers
-
-| Variable | Purpose |
-|----------|---------|
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Telegram Bot API |
-| `TELEGRAM_ENABLED` | Force off with `false` / `0` |
-| `NTFY_URL` / `NTFY_TOKEN` | ntfy topic (+ optional auth) |
-| `NTFY_ENABLED` | Force off |
-| `NOTIFIER_TIMEOUT_MS` | HTTP timeout (default 30000) |
-
-### Runtime
-
-| Variable | Purpose |
-|----------|---------|
-| `QUEUE_MAX_SIZE` / `QUEUE_DROP_POLICY` | Send queue back-pressure |
-| `HEARTBEAT_MS` / `HEALTH_FILE` | Health file refresh |
-| `SHUTDOWN_TIMEOUT_MS` | Graceful drain |
-| `DECISION_LOG` / `DECISION_LOG_FILE` | Optional NDJSON |
-
-### Ingest (package 05)
-
-| Variable | Purpose |
-|----------|---------|
-| `CAMERA_TYPE` | `reolink` (default) or `upcam` |
-| `CAMERA_ID` | Logical name in metadata |
-| `INGEST_MODE` | `files_only` \| `direct_notify` |
-| `INGEST_TARGET_DIR` | Default `images/received` |
-| `INGEST_INTERVAL_MS` / `INGEST_TIMEOUT_MS` / `INGEST_ONCE` | Poll / HTTP / single shot |
-| `INGEST_WRITE_METADATA` | Sidecar `.json` (default true) |
-| `REOLINK_SNAPSHOT_URL` or `REOLINK_HOST` + `USER` + `PASSWORD` | Snapshot source |
-| `UPCAM_SNAPSHOT_URL` or `UPCAM_HOST` + auth | Optional UpCam |
-
-### Motion (package 06)
-
-| Variable | Purpose |
-|----------|---------|
-| `MOTION_RECEIVED_DIR` / `FILTERED_DIR` / `SENT_DIR` | Folder contract |
-| `MOTION_POLL_MS` / `MOTION_ONCE` | Watcher |
-| `MOTION_NOTIFY` | Call hub on send (default true) |
-| `MOTION_SCORE_THRESHOLD` / `MOTION_PIXEL_DIFF_THRESHOLD` | Delta sensitivity |
-| `MOTION_BRIGHTNESS_MIN` / `MAX` | Reject dark/bright frames |
-| `MOTION_CONFIRM_COUNT` / `MOTION_COOLDOWN_MS` / `MOTION_MAX_SENDS` | Spam control |
-| `MOTION_ROI_START` / `END` / `MOTION_ZONES_JSON` | Coarse ROI / zones |
-
-Full commented list: `.env.example`.
-
-## Health
-
-`state/health.json` (when hub/`npm start` runs): status, RSS, queue, notifier health, send counters.  
-Motion writes `.decision.json` next to archived frames under `filtered/` and `sent/`.
-
-Graceful stop: **SIGINT** / **SIGTERM**.
-
-## Project layout
-
+```bash
+npm run notify -- --image images/received/example.jpg --caption "camera test"
 ```
+
+Optional local `.env` values:
+
+```env
+NOTIFY_LATEST_DIR=images/received
+NOTIFY_IMAGE_PATH=
+NOTIFY_CAPTION=zeus-herald camera image
+```
+
+
+
+## Cleanup
+
+Runtime cleanup runs inside the long-running `ingest` and `motion` workers.
+
+Defaults:
+
+```env
+CLEANUP_ENABLED=true
+CLEANUP_INTERVAL_MS=300000
+CLEANUP_IMAGES_ENABLED=true
+CLEANUP_IMAGES_MAX_AGE_HOURS=36
+CLEANUP_IMAGE_DIRS=images/received,images/filtered,images/sent
+CLEANUP_LOGS_ENABLED=true
+CLEANUP_LOGS_MAX_AGE_HOURS=48
+CLEANUP_LOG_DIRS=logs
+```
+
+Image cleanup removes old image files and their `.json` metadata sidecars from the configured image folders. Log cleanup removes old `.log`, `.ndjson`, and `.txt` files from the configured log folders.
+
+Set `CLEANUP_ENABLED=false` to disable all cleanup, or disable one side with `CLEANUP_IMAGES_ENABLED=false` / `CLEANUP_LOGS_ENABLED=false`.
+## ZIP Deployment
+
+Build a deployable ZIP on the source machine:
+
+```powershell
+npm run deploy:zip
+```
+
+The ZIP is written to `dist/` and intentionally includes local `.env` unless `-NoEnv` is used directly with the PowerShell script. It excludes `node_modules`, `.git`, `images`, `state`, `logs`, `.lock`, build folders, and legacy browser session folders.
+
+Copy the ZIP to the target system, extract it, then run:
+
+```powershell
+cd <target-folder>
+npm install
+npm run lint
+npm test
+npm run ingest:once
+npm run notify:latest
+```
+
+After verification, configure NSSM with two services:
+
+```text
+Path: <node-install>\npm.cmd
+Startup directory: <target-folder>
+Arguments: run ingest
+```
+
+```text
+Path: <node-install>\npm.cmd
+Startup directory: <target-folder>
+Arguments: run motion
+```
+
+Keep the ZIP private because it contains `.env`. Do not commit the ZIP, and do not copy it to public storage.
+## Operations
+
+- Health file: `state/health.json`
+- Decision log sidecars: `.decision.json` next to moved frames
+- App logs are optional through configured log files
+- Runtime output and camera images are ignored by git
+
+## Project Layout
+
+```text
 src/
-  index.js, app.js          hub + runtime
-  notifiers/                telegram, ntfy
-  ingest/                   camera HTTP → received/
-  motion/                   decision + folder routing
-  ingest-cli.js, motion-cli.js
-docs/adr/                   ADR-001 … 006
-packages/                   agent package specs 00–07
-test/                       unit + e2e-pipeline
+  app.js, index.js          notifier hub and exports
+  ingest/                   camera HTTP capture
+  motion/                   pixel metrics, decision, folder routing
+  notifiers/                Telegram, ntfy, shared compression
+  ingest-cli.js             ingest worker
+  motion-cli.js             motion worker
+  notify-cli.js             one-shot mobile send
+docs/
+  MIGRATION.md              legacy migration notes
+test/
+  *.test.js                 unit and integration tests
 ```
 
-## Tests & CI
+## Commands
 
 ```bash
 npm run lint
-npm test                # ban check + unit + e2e mock pipeline
+npm test
 npm run check:banned
+npm run ingest:once
+npm run motion:once
+npm run notify:latest
 ```
 
-GitHub Actions: `.github/workflows/ci.yml`.
+## Legacy Status
 
-## Architecture docs
+| Legacy project | zeus-herald replacement |
+| --- | --- |
+| upcam-client | `npm run ingest` |
+| SnapShotter motion routing | `npm run motion` |
+| WhatsApp delivery | Telegram Bot API and/or ntfy |
 
-| Doc | Content |
-|-----|---------|
-| `docs/ARCHITECTURE.md` | Principles |
-| `docs/MIGRATION.md` | From SnapShotter / upcam-client |
-| `docs/DISCONTINUATION.md` | Legacy status |
-| `docs/adr/ADR-001` … `006` | Layout, notifiers, ban, runtime, ingest, motion |
-| `docs/RELEASE-NOTES-v0.2.0-alpha.md` | This alpha release |
-| `agents/ROLES-AND-PROTOCOL.md` | Multi-agent rules |
+WhatsApp Web and Puppeteer are intentionally not part of zeus-herald.
 
-## Disclaimer
 
-Private open-source tool for technically experienced operators.  
-Not affiliated with Telegram, ntfy, UpCam, Reolink, or Meta.  
-You are responsible for camera access, privacy, network security, and notification targets.  
-Do not use for spam or abusive mass messaging.
 
-## Relationship to legacy projects
-
-| Legacy | Status |
-|--------|--------|
-| upcam-client | Maintenance only – features → zeus-herald |
-| SnapShotter | Maintenance only – features → zeus-herald |
-
-## License
-
-MIT – see `LICENSE`.
-
-## Version
-
-**v0.2.0-alpha** – ingest + motion + notifier hub (alpha).  
-Stable notifier-only baseline: **v0.1.0**.

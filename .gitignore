@@ -1,4 +1,4 @@
-# Dependencies
+﻿# Dependencies
 node_modules/
 
 # Environment / secrets
@@ -10,12 +10,16 @@ node_modules/
 .local/
 
 # Runtime data
+.lock/
 images/
 state/
 logs/
 *.log
 
-# whatsapp-web.js / puppeteer leftovers (legacy – keep ignored)
+# Deployment artifacts
+*.zip
+
+# whatsapp-web.js / puppeteer leftovers (legacy, keep ignored)
 .wwebjs_auth/
 .wwebjs_cache/
 

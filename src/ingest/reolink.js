@@ -1,23 +1,86 @@
 import { createTimeout, safeErrorMessage } from '../notifiers/base.js';
 
 /**
- * Build Reolink Snap CGI URL when host + credentials are set.
- * @param {{ host: string, user: string, password: string, channel: string, snapshotUrl: string }} cfg
- * @returns {string}
+ * @param {string} template
+ * @param {{ timestamp: string, channel: string, user: string, password: string }} values
  */
-export function buildReolinkSnapshotUrl(cfg) {
-  if (cfg.snapshotUrl) return cfg.snapshotUrl;
+function expandSnapshotTemplate(template, values) {
+  return template
+    .replaceAll('{timestamp}', values.timestamp)
+    .replaceAll('{channel}', encodeURIComponent(values.channel || '0'))
+    .replaceAll('{username}', values.user)
+    .replaceAll('{password}', values.password)
+    .replaceAll('{usernameEncoded}', encodeURIComponent(values.user))
+    .replaceAll('{passwordEncoded}', encodeURIComponent(values.password));
+}
+
+/**
+ * @param {{ host: string, httpPort?: number }} cfg
+ */
+/**
+ * @param {Buffer} buffer
+ * @param {string} contentType
+ */
+function assertImageResponse(buffer, contentType) {
+  const normalizedType = String(contentType || '').toLowerCase();
+  const looksLikeJson = normalizedType.includes('json') || /^[\s\r\n]*[\[{]/.test(buffer.toString('utf8', 0, Math.min(buffer.length, 16)));
+  if (looksLikeJson) {
+    let detail = 'json_response';
+    try {
+      const parsed = JSON.parse(buffer.toString('utf8'));
+      const first = Array.isArray(parsed) ? parsed[0] : parsed;
+      detail = first?.error?.detail || first?.error?.rspCode || first?.code || detail;
+    } catch {
+      // Keep the generic JSON marker when the body is not parseable.
+    }
+    throw new Error(`reolink_non_image_response:${detail}`);
+  }
+
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+  const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+  const isWebp = buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+  if (!isJpeg && !isPng && !isWebp && !normalizedType.startsWith('image/')) {
+    throw new Error('reolink_non_image_response:unknown_body');
+  }
+}
+function buildBaseUrl(cfg) {
   if (!cfg.host) {
     throw new Error('reolink_missing_host_or_snapshot_url');
   }
+
   const base = cfg.host.startsWith('http') ? cfg.host : `http://${cfg.host}`;
-  const u = new URL('/cgi-bin/api.cgi', base.endsWith('/') ? base : `${base}/`);
-  u.searchParams.set('cmd', 'Snap');
-  u.searchParams.set('channel', cfg.channel || '0');
-  u.searchParams.set('rs', 'zeusHerald');
-  if (cfg.user) u.searchParams.set('user', cfg.user);
-  if (cfg.password) u.searchParams.set('password', cfg.password);
-  return u.toString();
+  const u = new URL(base.endsWith('/') ? base : `${base}/`);
+  if (!cfg.host.startsWith('http') && cfg.httpPort && cfg.httpPort !== 80) {
+    u.port = String(cfg.httpPort);
+  }
+  return u;
+}
+
+/**
+ * Build Reolink Snap CGI URL when host + credentials are set.
+ * @param {{ host: string, httpPort?: number, user: string, password: string, channel: string, snapshotUrl: string, snapshotPath?: string }} cfg
+ * @param {{ timestamp?: string }} [options]
+ * @returns {string}
+ */
+export function buildReolinkSnapshotUrl(cfg, options = {}) {
+  const timestamp = options.timestamp || String(Date.now());
+  const values = {
+    timestamp,
+    channel: cfg.channel || '0',
+    user: cfg.user || '',
+    password: cfg.password || '',
+  };
+
+  if (cfg.snapshotUrl) {
+    return expandSnapshotTemplate(cfg.snapshotUrl, values);
+  }
+
+  const base = buildBaseUrl(cfg);
+  const rawPath = cfg.snapshotPath ||
+    '/cgi-bin/api.cgi?cmd=Snap&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}';
+  const expandedPath = expandSnapshotTemplate(rawPath, values);
+  const url = new URL(expandedPath, base);
+  return url.toString();
 }
 
 /**
@@ -34,10 +97,8 @@ export async function fetchReolinkSnapshot(options) {
   try {
     /** @type {Record<string, string>} */
     const headers = { Accept: 'image/jpeg,image/*,*/*' };
-    // Prefer query auth (Reolink common); optional Basic if user set and no password in query path
-    if (config.user && config.password && !config.snapshotUrl) {
-      // password already in query via buildReolinkSnapshotUrl
-    } else if (config.user && config.password && config.snapshotUrl) {
+    // Prefer query auth (Reolink common); optional Basic for explicit custom URLs.
+    if (config.user && config.password && config.snapshotUrl) {
       const token = Buffer.from(`${config.user}:${config.password}`, 'utf8').toString('base64');
       headers.Authorization = `Basic ${token}`;
     }
@@ -62,11 +123,45 @@ export async function fetchReolinkSnapshot(options) {
       res.headers?.get?.('content-type') ||
       (typeof res.headers?.get === 'function' ? res.headers.get('content-type') : null) ||
       'image/jpeg';
+    const normalizedContentType = String(contentType).split(';')[0].trim() || 'image/jpeg';
+    assertImageResponse(buffer, normalizedContentType);
 
-    return { buffer, contentType: String(contentType).split(';')[0].trim() || 'image/jpeg' };
+    return { buffer, contentType: normalizedContentType };
   } catch (err) {
     throw new Error(safeErrorMessage(err));
   } finally {
     timeout.clear();
   }
+}
+
+/**
+ * Capture a single snapshot or a short burst from Reolink.
+ * @param {object} options
+ * @param {ReturnType<import('./config.js').loadIngestConfig>['reolink']} options.config
+ * @param {number} [options.timeoutMs]
+ * @param {typeof fetch} [options.fetchImpl]
+ * @returns {Promise<Array<{ buffer: Buffer, contentType: string, burstIndex: number, burstCount: number }>>}
+ */
+export async function fetchReolinkSnapshots(options) {
+  const { config } = options;
+  const burstCount = config.burst?.enabled ? Math.max(1, config.burst.count || 1) : 1;
+  /** @type {Array<{ buffer: Buffer, contentType: string, burstIndex: number, burstCount: number }>} */
+  const frames = [];
+
+  for (let i = 0; i < burstCount; i += 1) {
+    const snapshot = await fetchReolinkSnapshot(options);
+    frames.push({ ...snapshot, burstIndex: i + 1, burstCount });
+    if (i < burstCount - 1) {
+      await delay(config.burst?.intervalMs || 350);
+    }
+  }
+
+  return frames;
+}
+
+/**
+ * @param {number} ms
+ */
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

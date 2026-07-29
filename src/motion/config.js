@@ -23,6 +23,15 @@ function parsePositiveInt(raw, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+
+/**
+ * @param {string | undefined} raw
+ * @param {number} fallback
+ */
+function parseNonNegativeInt(raw, fallback) {
+  const n = Number.parseInt(raw || '', 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
 /**
  * @param {string | undefined} raw
  * @param {number} fallback
@@ -70,6 +79,36 @@ function parseZones(env) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {{ x: number, y: number } | null}
+ */
+function parsePoint(value) {
+  if (!value || typeof value !== 'object') return null;
+  const p = /** @type {{ x?: unknown, y?: unknown }} */ (value);
+  const x = Number(p.x);
+  const y = Number(p.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y };
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @returns {Array<Array<{ x: number, y: number }>>}
+ */
+function parseRoiPolygons(env) {
+  const raw = (env.MOTION_ROI_POLYGONS_JSON || '').trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((poly) => (Array.isArray(poly) ? poly.map(parsePoint).filter(Boolean) : []))
+      .filter((poly) => poly.length >= 3);
+  } catch {
+    return [];
+  }
+}
+/**
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function loadMotionConfig(env = process.env) {
@@ -79,8 +118,13 @@ export function loadMotionConfig(env = process.env) {
     sentDir: (env.MOTION_SENT_DIR || 'images/sent').trim(),
     pollMs: parsePositiveInt(env.MOTION_POLL_MS, 1000),
     once: parseBool(env.MOTION_ONCE, false),
-    // delta: fraction of sampled bytes that differ beyond pixel threshold
-    pixelDiffThreshold: parsePositiveInt(env.MOTION_PIXEL_DIFF_THRESHOLD, 12),
+    // Pixel path: decode image, resize/crop/ROI, then compare grayscale samples.
+    imageDecodeEnabled: parseBool(env.MOTION_IMAGE_DECODE_ENABLED, true),
+    resizeWidth: parsePositiveInt(env.MOTION_RESIZE_WIDTH, 384),
+    cropTopPx: parseNonNegativeInt(env.MOTION_CROP_TOP_PX, 24),
+    roiPolygons: parseRoiPolygons(env),
+    // delta: fraction of sampled pixels that differ beyond threshold
+    pixelDiffThreshold: parsePositiveInt(env.MOTION_PIXEL_DIFF_THRESHOLD, 17),
     motionScoreThreshold: parseNumber(env.MOTION_SCORE_THRESHOLD, 0.02),
     sampleStride: parsePositiveInt(env.MOTION_SAMPLE_STRIDE, 16),
     roi: parseRoi(env),
@@ -99,3 +143,6 @@ export function loadMotionConfig(env = process.env) {
       .filter(Boolean),
   };
 }
+
+
+

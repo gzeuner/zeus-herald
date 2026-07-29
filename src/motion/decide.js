@@ -102,8 +102,11 @@ function baseMetrics(m, eventState, now) {
     hasBaseline: m.hasBaseline,
     zoneSummary: m.zoneSummary,
     zonePass: m.zonePass,
+    mode: m.mode,
+    image: m.image,
     positiveStreak: eventState.positiveStreak,
     sendsThisEvent: eventState.sendsThisEvent,
     at: new Date(now).toISOString(),
   };
 }
+

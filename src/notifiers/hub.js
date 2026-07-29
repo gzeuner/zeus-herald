@@ -27,6 +27,7 @@ export function createNotifiers(config, deps = {}) {
   const list = [];
   const fetchImpl = deps.fetchImpl;
   const timeoutMs = config.notifier.timeoutMs;
+  const imageCompression = config.notifier.imageCompression;
 
   if (config.telegram.enabled) {
     list.push(
@@ -34,6 +35,7 @@ export function createNotifiers(config, deps = {}) {
         botToken: config.telegram.botToken,
         chatId: config.telegram.chatId,
         timeoutMs,
+        imageCompression,
         fetchImpl,
       }),
     );
@@ -45,6 +47,7 @@ export function createNotifiers(config, deps = {}) {
         url: config.ntfy.url,
         token: config.ntfy.token,
         timeoutMs,
+        imageCompression,
         fetchImpl,
       }),
     );
@@ -133,3 +136,4 @@ export function createNotifierHub(notifiers) {
     health,
   };
 }
+

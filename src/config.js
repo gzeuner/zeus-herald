@@ -14,10 +14,33 @@ function isExplicitlyDisabled(value) {
 }
 
 /**
+ * @param {string | undefined} raw
+ * @param {number} fallback
+ */
+function parsePositiveInt(raw, fallback) {
+  const n = Number.parseInt(raw || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/**
+ * @param {string | undefined} value
+ * @param {boolean} defaultValue
+ */
+function parseBool(value, defaultValue) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const v = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(v)) return true;
+  if (['0', 'false', 'no', 'off'].includes(v)) return false;
+  return defaultValue;
+}
+
+/**
  * @param {NodeJS.ProcessEnv} [env]
  */
 export function loadConfig(env = process.env) {
-  const timeoutMs = Number.parseInt(env.NOTIFIER_TIMEOUT_MS || '30000', 10);
+  const timeoutMs = parsePositiveInt(env.NOTIFIER_TIMEOUT_MS, 30000);
+  const imageMaxWidth = parsePositiveInt(env.NOTIFIER_IMAGE_MAX_WIDTH, 1280);
+  const imageJpegQuality = Math.min(100, Math.max(1, parsePositiveInt(env.NOTIFIER_IMAGE_JPEG_QUALITY, 72)));
   const telegramToken = (env.TELEGRAM_BOT_TOKEN || '').trim();
   const telegramChatId = (env.TELEGRAM_CHAT_ID || '').trim();
   const ntfyUrl = (env.NTFY_URL || '').trim();
@@ -42,7 +65,12 @@ export function loadConfig(env = process.env) {
       token: (env.NTFY_TOKEN || '').trim(),
     },
     notifier: {
-      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000,
+      timeoutMs,
+      imageCompression: {
+        enabled: parseBool(env.NOTIFIER_IMAGE_COMPRESSION_ENABLED, true),
+        maxWidth: imageMaxWidth,
+        jpegQuality: imageJpegQuality,
+      },
     },
   };
 }
@@ -55,3 +83,5 @@ export function loadConfig(env = process.env) {
 export function secretValues(config) {
   return [config.telegram.botToken, config.ntfy.token].filter((s) => s && s.length > 0);
 }
+
+

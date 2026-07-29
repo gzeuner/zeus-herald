@@ -13,6 +13,7 @@ const TELEGRAM_API = 'https://api.telegram.org';
  * @param {string} options.botToken
  * @param {string} options.chatId
  * @param {number} [options.timeoutMs]
+ * @param {import('./base.js').ImageCompressionOptions} [options.imageCompression]
  * @param {typeof fetch} [options.fetchImpl]
  */
 export function createTelegramNotifier(options) {
@@ -20,6 +21,7 @@ export function createTelegramNotifier(options) {
     botToken,
     chatId,
     timeoutMs = 30000,
+    imageCompression = {},
     fetchImpl = globalThis.fetch,
   } = options;
 
@@ -37,7 +39,7 @@ export function createTelegramNotifier(options) {
     const started = Date.now();
     const timeout = createTimeout(timeoutMs);
     try {
-      const { buffer, filename, contentType } = await loadImageFile(payload.imagePath);
+      const { buffer, filename, contentType } = await loadImageFile(payload.imagePath, imageCompression);
       const form = new FormData();
       form.append('chat_id', chatId);
       const caption = truncateCaption(payload.caption);
@@ -122,3 +124,4 @@ export function createTelegramNotifier(options) {
 
   return { name, send, health };
 }
+

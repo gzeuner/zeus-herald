@@ -1,4 +1,4 @@
-/**
+﻿/**
  * zeus-herald entrypoint.
  */
 
@@ -15,6 +15,9 @@ export { BoundedQueue } from './queue.js';
 export { RuntimeSupervisor } from './runtimeSupervisor.js';
 export { createIngest, loadIngestConfig } from './ingest/index.js';
 export { createMotion, loadMotionConfig } from './motion/index.js';
+export { acquireProcessLock } from './processLock.js';
+export { cleanupOnce, loadCleanupConfig, startCleanup } from './cleanup.js';
+export { findLatestImage, notifyImage, parseNotifyArgs } from './notify-cli.js';
 
 const isMain =
   process.argv[1] &&
@@ -40,3 +43,6 @@ if (isMain) {
   // Idle long-running process: heartbeat keeps health fresh until signal.
   // Work is pushed via enqueueNotify from future ingest/watchers.
 }
+
+
+

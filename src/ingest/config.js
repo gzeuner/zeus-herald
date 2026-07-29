@@ -41,6 +41,11 @@ export function loadIngestConfig(env = process.env) {
   const reolinkUser = (env.REOLINK_USER || env.REOLINK_USERNAME || '').trim();
   const reolinkPassword = (env.REOLINK_PASSWORD || '').trim();
   const reolinkChannel = (env.REOLINK_CHANNEL || '0').trim();
+  const reolinkHttpPort = parsePositiveInt(env.REOLINK_HTTP_PORT, 80);
+  const reolinkSnapshotPath = (
+    env.REOLINK_SNAPSHOT_PATH ||
+    '/cgi-bin/api.cgi?cmd=Snap&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}'
+  ).trim();
 
   const upcamSnapshotUrl = (env.UPCAM_SNAPSHOT_URL || '').trim();
   const upcamHost = (env.UPCAM_HOST || '').trim().replace(/\/$/, '');
@@ -59,9 +64,17 @@ export function loadIngestConfig(env = process.env) {
     reolink: {
       snapshotUrl: reolinkSnapshotUrl,
       host: reolinkHost,
+      httpPort: reolinkHttpPort,
       user: reolinkUser,
       password: reolinkPassword,
       channel: reolinkChannel,
+      snapshotPath: reolinkSnapshotPath,
+      burst: {
+        enabled: parseBool(env.REOLINK_BURST_ENABLED, false),
+        count: parsePositiveInt(env.REOLINK_BURST_COUNT, 2),
+        intervalMs: parsePositiveInt(env.REOLINK_BURST_INTERVAL_MS, 350),
+        requireSignal: parseBool(env.REOLINK_BURST_REQUIRE_SIGNAL, false),
+      },
     },
     upcam: {
       snapshotUrl: upcamSnapshotUrl,
