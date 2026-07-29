@@ -1,31 +1,21 @@
-# Release notes – v0.1.0
+# Release notes - v0.1.0
 
-**Date:** 2026-07-22  
-**Tag:** `v0.1.0`
+Historical release notes for the initial notifier-hub baseline.
 
 ## Highlights
 
-- Greenfield **zeus-herald** repository: ESM Node 20+, MIT license, CI skeleton
-- **Notifier hub** with Telegram Bot (`sendPhoto`) and ntfy (HTTP PUT image)
-- Overall delivery success if **≥1** channel succeeds; isolated failures
-- **Env-first** config, secret redaction in structured JSON logs
-- **Runtime:** bounded serial queue, health file, heartbeat + notifier probe, SIGINT/SIGTERM
-- **Hard ban** on WhatsApp / Puppeteer / Playwright (automated check in `npm test`)
-- ADRs 001–004 and migration / discontinuation docs
+- Node.js 20+ project scaffold with ESM modules.
+- Telegram Bot API and ntfy notifier adapters.
+- Pluggable notifier hub with isolated channel failures.
+- Env-first configuration and secret redaction.
+- Bounded queue, health file, heartbeat, and graceful shutdown.
+- Automated check against WhatsApp Web and browser-automation runtime dependencies.
 
-## Not in this release
-
-- Full camera ingest (use legacy upcam-client or external writer for now)
-- Full motion/zone pipeline parity with SnapShotter
-- Published npm package / container image (optional follow-up)
-
-## Upgrade / install
+## Install
 
 ```bash
 git checkout v0.1.0
-cp .env.example .env   # set TELEGRAM_* and/or NTFY_URL
+cp .env.example .env
+npm install
 npm test
-npm start
 ```
-
-See `README.md` and `docs/MIGRATION.md`.

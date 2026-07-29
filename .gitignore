@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 
 # Environment / secrets
@@ -6,7 +6,7 @@ node_modules/
 .env.*
 !.env.example
 
-# Private local agent state (never commit)
+# Private local tool state (never commit)
 .local/
 
 # Runtime data

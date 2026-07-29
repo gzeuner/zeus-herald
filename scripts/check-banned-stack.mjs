@@ -2,7 +2,7 @@
  * Fails if banned WhatsApp / browser-automation stacks appear in
  * package.json dependencies or under src/ and test/.
  *
- * Allowed: mentions in docs/, packages/, agents/, templates/, ADRs.
+ * Allowed: mentions in public documentation and test descriptions.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';

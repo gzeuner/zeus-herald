@@ -1,33 +1,20 @@
-# Official Discontinuation Notice
+# Discontinuation Notice
 
-## upcam-client & SnapShotter
+Active feature development for the previous `upcam-client` / SnapShotter / WhatsApp-Web based architecture has moved to Zeus Herald.
 
-**Date:** 2026-07-22  
-**Decision:** Active feature development on the current architecture is discontinued.
+## Reasons
 
-### Reasons
+- Browser automation around WhatsApp Web is fragile for unattended operation.
+- Chromium-based runtimes increase memory use and operational complexity.
+- Official HTTP/APIs are easier to monitor and recover.
+- Camera ingest, motion detection, and mobile delivery are now maintained in one repository.
 
-1. Heavy dependency on whatsapp-web.js / Puppeteer caused continuous breakage and high maintenance cost.
-2. Memory and process-lifecycle issues (Chromium, session locks) made 24/7 operation fragile.
-3. The two-repo + submodule setup increased operational complexity.
-4. A cleaner, more reliable successor architecture (Telegram + ntfy, pluggable notifiers) is now preferred.
+## Current Recommendation
 
-### What this means
+Use Zeus Herald for new development and deployments that can use Telegram, ntfy, or both as notification channels.
 
-- **No new features** will be added to `gzeuner/upcam-client` or `gzeuner/SnapShotter`.
-- Security fixes and critical bugfixes *may* still be applied if necessary.
-- Existing installations continue to work; users are encouraged to migrate to **zeus-herald**.
-- The legacy repositories remain public and MIT-licensed for archival and reference purposes.
+Existing legacy installations can continue to run independently, but new feature work should target Zeus Herald.
 
-### Migration path
+## Migration
 
-1. Read the zeus-herald roadmap and architecture documents.
-2. Follow the packages under `packages/` (ordered).
-3. Secrets and local state stay under `.local/` and are never committed.
-
-### README snippet to add to legacy projects
-
-```markdown
-> **Note (2026-07):** Active development has moved to the successor project **zeus-herald**.
-> This repository is in maintenance-only mode. See the discontinuation notice for details.
-```
+See [MIGRATION.md](MIGRATION.md).
