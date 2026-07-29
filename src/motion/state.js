@@ -32,8 +32,7 @@ export class MotionEventState {
     if (
       this.lastPositiveAt &&
       this.eventIdleMs > 0 &&
-      now - this.lastPositiveAt > this.eventIdleMs &&
-      !motionPositive
+      now - this.lastPositiveAt >= this.eventIdleMs
     ) {
       this.resetEvent();
     }

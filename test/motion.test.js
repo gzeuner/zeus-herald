@@ -88,6 +88,24 @@ describe('MotionEventState', () => {
   });
 });
 
+  test('idle gap resets capped event before next positive signal', () => {
+    const s = new MotionEventState({
+      confirmCount: 1,
+      cooldownMs: 0,
+      maxSendsPerEvent: 1,
+      eventIdleMs: 5_000,
+    });
+    const t0 = 1_000_000;
+    assert.equal(s.evaluate(true, t0).allowSend, true);
+    s.recordSend(t0);
+    assert.equal(s.evaluate(true, t0 + 1_000).reasonGate, 'max_sends');
+
+    const afterIdle = s.evaluate(true, t0 + 6_000);
+    assert.equal(afterIdle.allowSend, true);
+    assert.equal(afterIdle.metrics.sendsThisEvent, 0);
+  });
+
+
 describe('decideFrame', () => {
   const baseCfg = loadMotionConfig({
     MOTION_SCORE_THRESHOLD: '0.02',
