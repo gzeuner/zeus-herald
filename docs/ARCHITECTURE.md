@@ -1,24 +1,42 @@
-# Architecture – zeus-herald
+# Architektur
 
-## Principles
+Zeus Herald ist ein lokaler Node.js-Dienst fuer Kamera-Snapshots, Bewegungserkennung und mobile Benachrichtigungen. Die Architektur priorisiert einfache Betriebsfuehrung, offizielle APIs und klare Trennung zwischen Aufnahme, Entscheidung und Versand.
 
-1. **Reliability over cleverness** – official APIs only (Telegram Bot API, ntfy HTTP).
-2. **Pluggable notifiers** – one interface, many adapters.
-3. **Observable** – structured health, decision logs, metrics.
-4. **Resource-conscious** – no headless browsers, explicit buffer disposal.
-5. **Autonomous-friendly** – clear packages, ADRs, role contracts so agents can work without constant human intervention.
+## Prinzipien
 
-## Components (target)
+1. Lokaler Betrieb vor externer Abhaengigkeit.
+2. Offizielle Schnittstellen statt Browser-Automation.
+3. Einmalige Motion-Entscheidung, danach Fan-out an aktive Notifier.
+4. Keine Secrets im Repository.
+5. Kleine, testbare Module ohne Build-Schritt.
+6. Laufzeitdaten bleiben maschinenlokal.
 
-| Component | Responsibility | Tech (initial) |
-|-----------|----------------|----------------|
-| Ingest | Pull snapshots from camera, pre-filter, write files + metadata | Java 21 (ported from upcam-client) or later Go/Python |
-| Processor | Watch / receive frames, motion & zone logic, event state machine | Node.js 20+ (ported & cleaned from SnapShotter) |
-| Notifier Hub | Dispatch accepted events to one or more channels | Node.js – Telegram + ntfy first |
-| Runtime Supervisor | Health, queues, recovery actions, sample archive | Shared |
-| Config & Secrets | Env-first, no secrets in git | dotenv / env vars |
+## Komponenten
 
-## Notifier Interface (contract)
+| Komponente | Verantwortung |
+| --- | --- |
+| Ingest | Holt Snapshots von Reolink oder optional UpCam und schreibt Bilder plus Metadaten. |
+| Motion | Liest neue Bilder, berechnet Pixel-Deltas, bewertet Ereignisse und verschiebt Dateien. |
+| Notifier Hub | Sendet akzeptierte Frames an Telegram, ntfy oder beide Kanaele. |
+| Runtime Supervisor | Fuehrt Queue-, Health- und Shutdown-Logik. |
+| Cleanup | Entfernt alte Bilder, JSON-Sidecars und Logs anhand konfigurierbarer Grenzwerte. |
+| Deployment Script | Erstellt ein ZIP-Paket ohne Dependencies und Runtime-Daten. |
+
+## Datenfluss
+
+```text
+Camera
+  -> Ingest
+  -> images/received/ + optional metadata
+  -> Motion decision
+  -> images/filtered/ or images/sent/ + decision sidecar
+  -> Notifier Hub
+  -> Telegram / ntfy
+```
+
+## Notifier-Kontrakt
+
+Notifier implementieren denselben logischen Vertrag:
 
 ```ts
 interface Notifier {
@@ -28,27 +46,18 @@ interface Notifier {
 }
 ```
 
-At least one successful notifier is required for an event to be considered “delivered”.  
-Failures of individual notifiers are logged but do not block others.
+Ein Ereignis gilt als erfolgreich zugestellt, wenn mindestens ein aktivierter Notifier erfolgreich sendet. Fehler einzelner Kanaele werden protokolliert, blockieren aber andere Kanaele nicht.
 
-## Data flow
+## Nicht-Ziele
 
-```
-Camera → Ingest → received/ + .json metadata
-                → Processor (motion/event)
-                → pending/ (if send)
-                → Notifier Hub
-                → sent/  (success)  |  filtered/ (no send)
-```
+- WhatsApp Web, Puppeteer, Playwright oder andere Browser-Automation als Runtime-Abhaengigkeit.
+- SaaS- oder Multi-Tenant-Betrieb.
+- Zertifizierte Alarmanlage oder garantierte Echtzeitueberwachung.
+- Schwere ML-Modelle im aktuellen Stand.
 
-## Non-goals (v1)
+## Relevante Dokumente
 
-- WhatsApp / any browser automation
-- Multi-tenant SaaS features
-- Guaranteed real-time alarm system certification
-- Heavy ML models (optional later as score booster)
-
-## Evolution
-
-- Phase 0–1: Clean notifier cut-over (this roadmap)
-- Later: optional single-binary rewrite, camera webhooks, richer event model, optional lightweight object detection
+- [Konfiguration](CONFIGURATION.md)
+- [Betrieb](OPERATIONS.md)
+- [Migration](MIGRATION.md)
+- [Discontinuation Notice](DISCONTINUATION.md)

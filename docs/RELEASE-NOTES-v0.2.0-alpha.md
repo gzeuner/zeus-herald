@@ -1,52 +1,24 @@
-# Release notes – v0.2.0-alpha
+# Release notes - v0.2.0-alpha
 
-**Date:** 2026-07-22  
-**Tag:** `v0.2.0-alpha`  
-**Status:** alpha – ingest + motion pipeline usable; tune thresholds on real cameras
+Historical release notes for the first alpha with ingest and motion support.
 
 ## Highlights
 
-- **Package 05 – Ingest:** Reolink (primary) + optional UpCam HTTP snapshot → `images/received/` + optional metadata JSON  
-  - Modes: `files_only` (default) or `direct_notify` via hub  
-  - CLI: `npm run ingest` / `INGEST_ONCE=1`
-- **Package 06 – Motion:** Decision `{ send, reason, metrics }` with confirm / cooldown / max sends, brightness + delta gates  
-  - Folders: `received` → `filtered` | `sent` (+ `.decision.json`)  
-  - Notify **only** through Notifier Hub  
-  - CLI: `npm run motion` / `MOTION_ONCE=1`
-- **E2E (CI-safe):** fixture frames through writer + motion + mock notify (`test/e2e-pipeline.test.js`)
-- **ADRs:** ADR-005 (ingest), ADR-006 (motion) **Accepted**
-- **Docs:** README pipeline + env matrix; MIGRATION full-stack path
+- Reolink snapshot ingest and optional UpCam snapshot ingest.
+- Folder-based camera pipeline: `images/received/`, `images/filtered/`, `images/sent/`.
+- Motion routing with confirmation, cooldown, brightness gates, and notifier fan-out.
+- Telegram and ntfy mobile delivery through the shared notifier hub.
+- CI-safe end-to-end pipeline tests.
 
-## Still simplified / known limits
+## Notes
 
-- Motion delta is a **byte-sample heuristic** (no full JPEG decode / Sharp) — good for fixtures; tune or extend for production scenes
-- Not full SnapShotter parity (zones/ROI are env-level fractions, not visual editor)
-- No published npm package / container image
+The current `main` branch contains additional improvements after this tag, including JPEG pixel comparison, ROI polygons, shared image compression, cleanup, Telegram chat-id helper, and ZIP deployment. See the current README and configuration documentation for the latest supported behavior.
 
-## Upgrade / install
+## Install
 
 ```bash
-git fetch --tags
 git checkout v0.2.0-alpha
 cp .env.example .env
-# set TELEGRAM_* and/or NTFY_URL
-# set REOLINK_* or drop JPEGs into images/received/
+npm install
 npm test
-# terminal A:
-npm run ingest
-# terminal B:
-npm run motion
 ```
-
-See `README.md` and `docs/MIGRATION.md`.
-
-## Tag checklist
-
-- [x] ADR-005 / ADR-006 Accepted
-- [x] Packages 05–06 implemented + unit tests
-- [x] E2E mock pipeline test green
-- [x] README + MIGRATION updated
-- [x] Release notes this file
-- [ ] `git tag -a v0.2.0-alpha` (Coordinator after commit)
-- [ ] `git push origin main` + `git push origin v0.2.0-alpha` (on request)
-- [ ] Optional: `gh release create v0.2.0-alpha --prerelease --notes-file docs/RELEASE-NOTES-v0.2.0-alpha.md`
