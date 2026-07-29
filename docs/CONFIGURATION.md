@@ -52,13 +52,14 @@ Wenn ein Passwort Sonderzeichen wie `#` enthaelt, muss es in `.env` in Anfuehrun
 ### Reolink Burst Capture
 
 ```env
+REOLINK_MOTION_STATE_PATH=/cgi-bin/api.cgi?cmd=GetMdState&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}
 REOLINK_BURST_ENABLED=true
-REOLINK_BURST_COUNT=2
-REOLINK_BURST_INTERVAL_MS=350
-REOLINK_BURST_REQUIRE_SIGNAL=false
+REOLINK_BURST_COUNT=4
+REOLINK_BURST_INTERVAL_MS=250
+REOLINK_BURST_REQUIRE_SIGNAL=true
 ```
 
-Burst Capture speichert mehrere kurz aufeinanderfolgende Snapshots pro Polling-Zyklus. Das kann die Bewegungserkennung stabilisieren, erhoeht aber Datenmenge und I/O.
+Mit `REOLINK_BURST_REQUIRE_SIGNAL=true` fragt Zeus Herald zuerst den Kamera-Motion-State ab und speichert nur bei aktivem Kameraalarm eigene Snapshots. Burst Capture speichert dann mehrere kurz aufeinanderfolgende Snapshots pro Alarm, was die spaetere Bildauswahl und optionale Pixelpruefung stabilisiert.
 
 ## UpCam
 
@@ -92,17 +93,17 @@ Zeus Herald dekodiert JPEGs, skaliert sie, schneidet optional den oberen Bereich
 | `MOTION_COOLDOWN_MS` | Mindestabstand zwischen Ereignissen. |
 | `MOTION_MAX_SENDS` | Maximalzahl Sendungen pro Ereignis. |
 
-Konservative Startwerte fuer Reolink-Snapshots:
+Empfindliche Startwerte fuer Reolink-Snapshots:
 
 ```env
 MOTION_IMAGE_DECODE_ENABLED=true
-MOTION_RESIZE_WIDTH=384
+MOTION_RESIZE_WIDTH=512
 MOTION_CROP_TOP_PX=24
-MOTION_PIXEL_DIFF_THRESHOLD=17
-MOTION_SCORE_THRESHOLD=0.08
-MOTION_CONFIRM_COUNT=3
-MOTION_COOLDOWN_MS=9000
-MOTION_MAX_SENDS=4
+MOTION_PIXEL_DIFF_THRESHOLD=12
+MOTION_SCORE_THRESHOLD=0.012
+MOTION_CONFIRM_COUNT=1
+MOTION_COOLDOWN_MS=2000
+MOTION_MAX_SENDS=6
 ```
 
 ## ROI-Polygone
@@ -150,8 +151,8 @@ Ein oeffentliches `ntfy.sh`-Topic ohne Token ist nur so privat wie der Topic-Nam
 
 ```env
 NOTIFIER_IMAGE_COMPRESSION_ENABLED=true
-NOTIFIER_IMAGE_MAX_WIDTH=1280
-NOTIFIER_IMAGE_JPEG_QUALITY=72
+NOTIFIER_IMAGE_MAX_WIDTH=1920
+NOTIFIER_IMAGE_JPEG_QUALITY=88
 ```
 
 Die Kompression erfolgt zentral, bevor Telegram oder ntfy das Bild erhalten. Wenn Kompression fehlschlaegt, wird das Originalbild verwendet, damit die Benachrichtigung nicht allein am Encoder scheitert.

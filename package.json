@@ -1,6 +1,6 @@
 {
   "name": "zeus-herald",
-  "version": "0.2.0-alpha",
+  "version": "0.2.0-alpha.2",
   "description": "Reliable camera event notifications via Telegram Bot and ntfy (successor to upcam-client / SnapShotter)",
   "type": "module",
   "engines": {

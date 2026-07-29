@@ -11,7 +11,7 @@ import { createApp } from '../app.js';
 
 export { loadIngestConfig, ingestSecretValues } from './config.js';
 export { writeReceivedFrame } from './writer.js';
-export { buildReolinkSnapshotUrl, fetchReolinkSnapshot, fetchReolinkSnapshots } from './reolink.js';
+export { buildReolinkMotionStateUrl, buildReolinkSnapshotUrl, fetchReolinkMotionState, fetchReolinkSnapshot, fetchReolinkSnapshots, parseReolinkMotionState } from './reolink.js';
 export { buildUpcamSnapshotUrl, fetchUpcamSnapshot } from './upcam.js';
 
 /**
@@ -81,9 +81,14 @@ export function createIngest(options = {}) {
         contentType: frame.contentType,
         writeMetadata: config.writeMetadata,
         requestId: frameRequestId,
-        extraMetadata: frame.burstCount > 1
-          ? { burstIndex: frame.burstIndex, burstCount: frame.burstCount }
-          : {},
+        extraMetadata: {
+          ...(frame.burstCount > 1
+            ? { burstIndex: frame.burstIndex, burstCount: frame.burstCount }
+            : {}),
+          ...(frame.motionSignal
+            ? { cameraMotionSignal: true, cameraMotionRawState: frame.motionSignal.rawState }
+            : {}),
+        },
       });
 
       logger.info('ingest_frame_written', {

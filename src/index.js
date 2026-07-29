@@ -1,11 +1,11 @@
-﻿/**
+/**
  * zeus-herald entrypoint.
  */
 
 import { createApp } from './app.js';
 import { logger } from './logger.js';
 
-export const version = '0.2.0-alpha';
+export const version = '0.2.0-alpha.2';
 
 export { loadConfig, secretValues } from './config.js';
 export { createNotifiers, createNotifierHub } from './notifiers/index.js';

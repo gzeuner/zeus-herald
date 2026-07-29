@@ -33,8 +33,8 @@ test('timeout falls back to 30000 on invalid', () => {
 test('notifier image compression defaults are enabled', () => {
   const cfg = loadConfig({});
   assert.equal(cfg.notifier.imageCompression.enabled, true);
-  assert.equal(cfg.notifier.imageCompression.maxWidth, 1280);
-  assert.equal(cfg.notifier.imageCompression.jpegQuality, 72);
+  assert.equal(cfg.notifier.imageCompression.maxWidth, 1920);
+  assert.equal(cfg.notifier.imageCompression.jpegQuality, 88);
 });
 
 test('notifier image compression can be configured', () => {

@@ -21,13 +21,15 @@ export function createProcessor(options) {
   async function processFile(imagePath, extraMeta = {}) {
     const buffer = await readFile(imagePath);
     const now = Date.now();
-    const { decision, samples } = decideFrame(
+    const result = decideFrame(
       buffer,
       config,
       previousSamples,
       eventState,
       now,
     );
+    const samples = result.samples;
+    const decision = applyCameraMotionSignal(result.decision, extraMeta, eventState, now);
     previousSamples = samples;
 
     const base = path.basename(imagePath);
@@ -82,6 +84,29 @@ export function createProcessor(options) {
   };
 }
 
+/**
+ * @param {import('./decide.js').MotionDecision} decision
+ * @param {Record<string, unknown>} extraMeta
+ * @param {import('./state.js').MotionEventState} eventState
+ * @param {number} now
+ * @returns {import('./decide.js').MotionDecision}
+ */
+function applyCameraMotionSignal(decision, extraMeta, eventState, now) {
+  if (decision.send || extraMeta.cameraMotionSignal !== true) return decision;
+
+  const gate = eventState.evaluate(true, now);
+  return {
+    send: gate.allowSend,
+    reason: gate.allowSend ? 'camera_motion' : gate.reasonGate || 'camera_motion_suppressed',
+    metrics: {
+      ...decision.metrics,
+      ...gate.metrics,
+      cameraMotionSignal: true,
+      cameraMotionRawState: extraMeta.cameraMotionRawState,
+      pixelReason: decision.reason,
+    },
+  };
+}
 /**
  * @param {string} from
  * @param {string} to

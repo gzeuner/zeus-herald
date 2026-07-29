@@ -21,6 +21,9 @@ describe('motion config', () => {
     assert.equal(cfg.confirmCount, 1);
     assert.ok(cfg.cooldownMs > 0);
     assert.equal(cfg.imageDecodeEnabled, true);
+    assert.equal(cfg.resizeWidth, 512);
+    assert.equal(cfg.pixelDiffThreshold, 12);
+    assert.equal(cfg.motionScoreThreshold, 0.012);
   });
 
   test('parses image decode resize crop and ROI polygons', () => {
@@ -193,6 +196,28 @@ describe('image pixel metrics', () => {
     assert.ok(b.score > 0.8);
     assert.equal(b.changed, b.compared);
   });
+
+  test('default image metrics catch small real pixel movement', () => {
+    const cfg = loadMotionConfig({
+      MOTION_CROP_TOP_PX: '0',
+      MOTION_BRIGHTNESS_MIN: '1',
+      MOTION_BRIGHTNESS_MAX: '254',
+    });
+    const first = jpegBuffer(128, 72, () => 90);
+    const second = jpegBuffer(128, 72, (i, channel) => {
+      const x = i % 128;
+      const y = Math.floor(i / 128);
+      const inMovedPatch = x >= 50 && x < 66 && y >= 26 && y < 36;
+      if (!inMovedPatch) return 90;
+      return channel === 'b' ? 125 : 118;
+    });
+
+    const a = computeFrameMetrics(first, cfg, null);
+    const b = computeFrameMetrics(second, cfg, a.samples);
+
+    assert.ok(b.score >= cfg.motionScoreThreshold);
+    assert.ok(b.changed > 0);
+  });
 });
 
 describe('createMotion folder routing', () => {
@@ -268,6 +293,75 @@ describe('createMotion folder routing', () => {
       assert.equal(decision.send, true);
       assert.equal(decision.reason, 'motion');
 
+      await motion.stop();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test('camera motion sidecar sends immediately without pixel baseline', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'zeus-motion-camera-signal-'));
+    const received = path.join(root, 'r');
+    const filtered = path.join(root, 'f');
+    const sent = path.join(root, 's');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(received, { recursive: true });
+    try {
+      const motion = createMotion({
+        createAppIfNeeded: false,
+        env: {
+          MOTION_RECEIVED_DIR: received,
+          MOTION_FILTERED_DIR: filtered,
+          MOTION_SENT_DIR: sent,
+          MOTION_NOTIFY: 'false',
+          MOTION_COOLDOWN_MS: '0',
+        },
+      });
+      const imagePath = path.join(received, 'camera.jpg');
+      await writeFile(imagePath, solidBuffer(80));
+      await writeFile(`${imagePath}.json`, JSON.stringify({ cameraMotionSignal: true, cameraMotionRawState: 1 }));
+
+      const r = await motion.processPath(imagePath, { cameraMotionSignal: true, cameraMotionRawState: 1 });
+
+      assert.equal(r.decision.send, true);
+      assert.equal(r.decision.reason, 'camera_motion');
+      assert.equal(r.decision.metrics.pixelReason, 'baseline');
+      await motion.stop();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test('scanOnce reads camera motion sidecar metadata', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'zeus-motion-sidecar-'));
+    const received = path.join(root, 'r');
+    const filtered = path.join(root, 'f');
+    const sent = path.join(root, 's');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(received, { recursive: true });
+    try {
+      const motion = createMotion({
+        createAppIfNeeded: false,
+        env: {
+          MOTION_RECEIVED_DIR: received,
+          MOTION_FILTERED_DIR: filtered,
+          MOTION_SENT_DIR: sent,
+          MOTION_NOTIFY: 'false',
+          MOTION_ONCE: '1',
+          MOTION_COOLDOWN_MS: '0',
+        },
+      });
+      const imagePath = path.join(received, 'sidecar.jpg');
+      await writeFile(imagePath, solidBuffer(90));
+      await writeFile(`${imagePath}.json`, JSON.stringify({ cameraMotionSignal: true, cameraMotionRawState: 1 }));
+
+      await motion.start();
+      const sentNames = await readdir(sent);
+      const decision = JSON.parse(
+        await readFile(path.join(sent, sentNames.find((n) => n.endsWith('.decision.json'))), 'utf8'),
+      );
+      assert.equal(decision.reason, 'camera_motion');
+      assert.equal(decision.metrics.pixelReason, 'baseline');
       await motion.stop();
     } finally {
       await rm(root, { recursive: true, force: true });

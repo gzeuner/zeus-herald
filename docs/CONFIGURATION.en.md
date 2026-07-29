@@ -52,13 +52,14 @@ If a password contains special characters such as `#`, quote it in `.env`.
 ### Reolink Burst Capture
 
 ```env
+REOLINK_MOTION_STATE_PATH=/cgi-bin/api.cgi?cmd=GetMdState&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}
 REOLINK_BURST_ENABLED=true
-REOLINK_BURST_COUNT=2
-REOLINK_BURST_INTERVAL_MS=350
-REOLINK_BURST_REQUIRE_SIGNAL=false
+REOLINK_BURST_COUNT=4
+REOLINK_BURST_INTERVAL_MS=250
+REOLINK_BURST_REQUIRE_SIGNAL=true
 ```
 
-Burst capture stores multiple snapshots close together per polling cycle. This can make motion detection more stable, but increases data volume and I/O.
+With `REOLINK_BURST_REQUIRE_SIGNAL=true`, Zeus Herald first polls the camera motion state and stores own snapshots only while the camera reports an alarm. Burst capture then stores several snapshots close together per alarm, which stabilizes later image selection and optional pixel checks.
 
 ## UpCam
 
@@ -92,17 +93,17 @@ Zeus Herald decodes JPEGs, resizes them, optionally crops the top area, applies 
 | `MOTION_COOLDOWN_MS` | Minimum gap between events. |
 | `MOTION_MAX_SENDS` | Maximum sends per event. |
 
-Conservative starting values for Reolink snapshots:
+Sensitive starting values for Reolink snapshots:
 
 ```env
 MOTION_IMAGE_DECODE_ENABLED=true
-MOTION_RESIZE_WIDTH=384
+MOTION_RESIZE_WIDTH=512
 MOTION_CROP_TOP_PX=24
-MOTION_PIXEL_DIFF_THRESHOLD=17
-MOTION_SCORE_THRESHOLD=0.08
-MOTION_CONFIRM_COUNT=3
-MOTION_COOLDOWN_MS=9000
-MOTION_MAX_SENDS=4
+MOTION_PIXEL_DIFF_THRESHOLD=12
+MOTION_SCORE_THRESHOLD=0.012
+MOTION_CONFIRM_COUNT=1
+MOTION_COOLDOWN_MS=2000
+MOTION_MAX_SENDS=6
 ```
 
 ## ROI Polygons
@@ -150,8 +151,8 @@ A public `ntfy.sh` topic without a token is only as private as the topic name. U
 
 ```env
 NOTIFIER_IMAGE_COMPRESSION_ENABLED=true
-NOTIFIER_IMAGE_MAX_WIDTH=1280
-NOTIFIER_IMAGE_JPEG_QUALITY=72
+NOTIFIER_IMAGE_MAX_WIDTH=1920
+NOTIFIER_IMAGE_JPEG_QUALITY=88
 ```
 
 Compression happens centrally before Telegram or ntfy receives the image. If compression fails, the original image is used so notification delivery does not fail solely because of the encoder.

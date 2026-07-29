@@ -14,7 +14,7 @@ npm run ingest
 npm run motion
 ```
 
-`ingest` ruft Kamera-Snapshots ab und schreibt sie in `images/received/`. `motion` verarbeitet neue Bilder, verschiebt sie nach `images/filtered/` oder `images/sent/` und sendet akzeptierte Frames ueber den Notifier Hub.
+`ingest` ruft Kamera-Snapshots ab und schreibt sie in `images/received/`. Bei Reolink kann vorher der kameraeigene Motion-State abgefragt werden; eigene Snapshots werden dann nur waehrend eines Kameraalarms als Burst gespeichert. `motion` verarbeitet neue Bilder, liest optionale Ingest-Sidecars, verschiebt sie nach `images/filtered/` oder `images/sent/` und sendet akzeptierte Frames ueber den Notifier Hub.
 
 ## Single-Shot-Kommandos
 
@@ -49,7 +49,11 @@ DECISION_LOG=1
 DECISION_LOG_FILE=logs/decisions.ndjson
 ```
 
-Bei Motion-Verarbeitung werden `.decision.json`-Sidecars neben verschobenen Bildern geschrieben. Diese Dateien helfen beim Threshold-Tuning und werden mit dem Bild-Cleanup entfernt, wenn `.json` in `CLEANUP_IMAGE_EXTENSIONS` enthalten ist.
+Ingest kann `.json`-Sidecars neben empfangenen Bildern schreiben. Bei Reolink enthalten diese optional den Kamera-Motion-State. Motion liest diese Sidecars und schreibt nach der Verarbeitung `.decision.json`-Sidecars neben verschobenen Bildern. Diese Dateien helfen beim Tuning und werden mit dem Bild-Cleanup entfernt, wenn `.json` in `CLEANUP_IMAGE_EXTENSIONS` enthalten ist.
+
+## Bildordner
+
+Die Standardordner images/received, images/filtered und images/sent werden automatisch angelegt, sobald Ingest oder Motion sie erstmals benoetigt. Sie sind Runtime-Daten und werden nicht committed.
 
 ## Prozess-Locks
 
@@ -135,7 +139,7 @@ Start, Stop und Status erfolgen ueber NSSM oder die Windows-Serviceverwaltung.
 | Telegram sendet nicht | Bot-Token, `TELEGRAM_CHAT_ID`, Bot wurde gestartet oder in Gruppe angeschrieben. |
 | ntfy sendet nicht | `NTFY_URL`, Topic, optional `NTFY_TOKEN`, Netzwerkerreichbarkeit. |
 | Zu viele Meldungen | `MOTION_SCORE_THRESHOLD`, `MOTION_CONFIRM_COUNT`, ROI und Cooldown erhoehen. |
-| Keine Meldungen bei Bewegung | Threshold senken, ROI pruefen, `images/filtered/` und Decision-Sidecars ansehen. |
+| Keine Meldungen bei Bewegung | Kamera-Motion-State, `REOLINK_BURST_REQUIRE_SIGNAL`, ROI, `images/filtered/` und Decision-Sidecars pruefen. |
 | Worker startet nicht | `.lock/` pruefen und sicherstellen, dass kein zweiter Prozess laeuft. |
 
 ## Datenschutz

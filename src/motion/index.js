@@ -2,7 +2,7 @@
  * Motion processor: received/ → Decision → filtered/ | sent/ + notify (ADR-006).
  */
 
-import { readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { loadMotionConfig } from './config.js';
 import { MotionEventState } from './state.js';
@@ -122,7 +122,7 @@ export function createMotion(options = {}) {
       if (stopped) break;
       inFlight.add(f.full);
       try {
-        await processPath(f.full);
+        await processPath(f.full, await readImageMetadata(f.full));
       } catch (err) {
         logger.warn('motion_process_failed', {
           path: f.full,
@@ -169,6 +169,21 @@ export function createMotion(options = {}) {
     }
     logger.info('motion_stopped');
   }
+
+
+/**
+ * @param {string} imagePath
+ * @returns {Promise<Record<string, unknown>>}
+ */
+async function readImageMetadata(imagePath) {
+  try {
+    const raw = await readFile(`${imagePath}.json`, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
   return {
     config,

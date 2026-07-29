@@ -1,13 +1,16 @@
-﻿import { test, describe } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { loadIngestConfig } from '../src/ingest/config.js';
 import {
+  buildReolinkMotionStateUrl,
   buildReolinkSnapshotUrl,
+  fetchReolinkMotionState,
   fetchReolinkSnapshot,
   fetchReolinkSnapshots,
+  parseReolinkMotionState,
 } from '../src/ingest/reolink.js';
 import { buildUpcamSnapshotUrl, fetchUpcamSnapshot } from '../src/ingest/upcam.js';
 import { writeReceivedFrame } from '../src/ingest/writer.js';
@@ -48,6 +51,7 @@ describe('ingest config', () => {
     assert.equal(cfg.reolink.host, '192.0.2.10');
     assert.equal(cfg.reolink.httpPort, 8080);
     assert.equal(cfg.reolink.snapshotPath, '/snap?rs={timestamp}');
+    assert.match(cfg.reolink.motionStatePath, /GetMdState/);
     assert.equal(cfg.reolink.burst.enabled, true);
     assert.equal(cfg.reolink.burst.count, 2);
     assert.equal(cfg.reolink.burst.intervalMs, 350);
@@ -85,6 +89,50 @@ describe('reolink / upcam clients', () => {
       url,
       'http://192.168.1.50:8080/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=123&user=zeus%20user&password=p%23s',
     );
+  });
+
+  test('buildReolinkMotionStateUrl defaults to GetMdState', () => {
+    const url = buildReolinkMotionStateUrl({
+      host: '192.168.1.50',
+      httpPort: 80,
+      user: 'admin',
+      password: 'secret',
+      channel: '0',
+    }, { timestamp: 'fixed' });
+    assert.match(url, /^http:\/\/192\.168\.1\.50\/cgi-bin\/api\.cgi/);
+    assert.match(url, /cmd=GetMdState/);
+    assert.match(url, /channel=0/);
+    assert.match(url, /rs=fixed/);
+  });
+
+  test('parseReolinkMotionState accepts common active and idle states', () => {
+    assert.equal(parseReolinkMotionState([{ cmd: 'GetMdState', code: 0, value: { state: 1 } }]).active, true);
+    assert.equal(parseReolinkMotionState([{ cmd: 'GetMdState', code: 0, value: { state: 0 } }]).active, false);
+    assert.equal(parseReolinkMotionState({ value: { alarm: 'motion' } }).active, true);
+  });
+
+  test('fetchReolinkMotionState reads JSON response', async () => {
+    const fetchImpl = async (url) => {
+      assert.match(String(url), /GetMdState/);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ cmd: 'GetMdState', code: 0, value: { state: 1 } }]),
+      };
+    };
+    const state = await fetchReolinkMotionState({
+      config: {
+        snapshotUrl: '',
+        motionStateUrl: '',
+        host: 'cam',
+        user: 'admin',
+        password: 'secret',
+        channel: '0',
+      },
+      fetchImpl,
+    });
+    assert.equal(state.active, true);
+    assert.equal(state.rawState, 1);
   });
 
   test('fetchReolinkSnapshot success with mock fetch', async () => {
@@ -143,6 +191,71 @@ describe('reolink / upcam clients', () => {
     assert.equal(frames.length, 2);
     assert.equal(frames[0].burstIndex, 1);
     assert.equal(frames[1].burstCount, 2);
+  });
+
+  test('fetchReolinkSnapshots skips capture while camera motion state is idle', async () => {
+    let calls = 0;
+    const fetchImpl = async (url) => {
+      calls += 1;
+      assert.match(String(url), /GetMdState/);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ cmd: 'GetMdState', code: 0, value: { state: 0 } }]),
+      };
+    };
+    const frames = await fetchReolinkSnapshots({
+      config: {
+        snapshotUrl: 'http://cam/snap?rs={timestamp}',
+        motionStateUrl: 'http://cam/api?cmd=GetMdState',
+        host: '',
+        user: '',
+        password: '',
+        channel: '0',
+        burst: { enabled: true, count: 2, intervalMs: 1, requireSignal: true },
+      },
+      fetchImpl,
+    });
+    assert.equal(calls, 1);
+    assert.equal(frames.length, 0);
+  });
+
+  test('fetchReolinkSnapshots captures burst when camera motion state is active', async () => {
+    let snapshots = 0;
+    const fetchImpl = async (url) => {
+      if (String(url).includes('GetMdState')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify([{ cmd: 'GetMdState', code: 0, value: { state: 1 } }]),
+        };
+      }
+      snapshots += 1;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'image/jpeg' },
+        arrayBuffer: async () => FAKE_JPEG.buffer.slice(
+          FAKE_JPEG.byteOffset,
+          FAKE_JPEG.byteOffset + FAKE_JPEG.byteLength,
+        ),
+      };
+    };
+    const frames = await fetchReolinkSnapshots({
+      config: {
+        snapshotUrl: 'http://cam/snap?rs={timestamp}',
+        motionStateUrl: 'http://cam/api?cmd=GetMdState',
+        host: '',
+        user: '',
+        password: '',
+        channel: '0',
+        burst: { enabled: true, count: 2, intervalMs: 1, requireSignal: true },
+      },
+      fetchImpl,
+    });
+    assert.equal(snapshots, 2);
+    assert.equal(frames.length, 2);
+    assert.equal(frames[0].motionSignal.active, true);
   });
 
   test('fetchReolinkSnapshot maps HTTP error', async () => {

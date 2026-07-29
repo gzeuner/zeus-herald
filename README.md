@@ -29,7 +29,7 @@ A tiny-tool.de / TT utility.
 
 - Lokal betreibbar, ohne Cloud-Zwang fuer Kameraauswertung.
 - Keine Browser-Automation, kein WhatsApp Web, kein Chromium-Prozess.
-- Pixelbasierte JPEG-Auswertung statt reiner Byte-Stream-Vergleiche.
+- Reolink-Kamera-Motion-State als primaerer Trigger mit optionaler pixelbasierter JPEG-Auswertung.
 - Telegram Bot API und ntfy als unabhaengige Benachrichtigungskanaele.
 - Gemeinsame Bildkompression vor der Uebertragung.
 - Prozesssperren gegen doppelte `ingest`- oder `motion`-Worker.

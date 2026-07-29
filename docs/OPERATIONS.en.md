@@ -14,7 +14,7 @@ npm run ingest
 npm run motion
 ```
 
-`ingest` fetches camera snapshots and writes them to `images/received/`. `motion` processes new images, moves them to `images/filtered/` or `images/sent/`, and sends accepted frames through the notifier hub.
+`ingest` fetches camera snapshots and writes them to `images/received/`. For Reolink, it can first poll the camera motion state and store own snapshots as a burst only while the camera reports an alarm. `motion` processes new images, reads optional ingest sidecars, moves them to `images/filtered/` or `images/sent/`, and sends accepted frames through the notifier hub.
 
 ## One-Shot Commands
 
@@ -49,7 +49,11 @@ DECISION_LOG=1
 DECISION_LOG_FILE=logs/decisions.ndjson
 ```
 
-During motion processing, `.decision.json` sidecars are written next to moved images. They help with threshold tuning and are removed by image cleanup if `.json` is included in `CLEANUP_IMAGE_EXTENSIONS`.
+Ingest can write `.json` sidecars next to received images. For Reolink, these can include the camera motion state. Motion reads those sidecars and writes `.decision.json` sidecars next to moved images after processing. They help with tuning and are removed by image cleanup if `.json` is included in `CLEANUP_IMAGE_EXTENSIONS`.
+
+## Image Folders
+
+The default folders images/received, images/filtered, and images/sent are created automatically when ingest or motion first needs them. They are runtime data and must not be committed.
 
 ## Process Locks
 
@@ -135,7 +139,7 @@ Start, stop, and status are handled through NSSM or Windows Services.
 | Telegram does not send | Bot token, `TELEGRAM_CHAT_ID`, bot was started or messaged in the group. |
 | ntfy does not send | `NTFY_URL`, topic, optional `NTFY_TOKEN`, network reachability. |
 | Too many notifications | Increase `MOTION_SCORE_THRESHOLD`, `MOTION_CONFIRM_COUNT`, ROI strictness, or cooldown. |
-| No notifications on motion | Lower thresholds, check ROI, inspect `images/filtered/` and decision sidecars. |
+| No notifications on motion | Check camera motion state, `REOLINK_BURST_REQUIRE_SIGNAL`, ROI, `images/filtered/`, and decision sidecars. |
 | Worker does not start | Check `.lock/` and ensure no second process is running. |
 
 ## Privacy

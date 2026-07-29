@@ -46,6 +46,11 @@ export function loadIngestConfig(env = process.env) {
     env.REOLINK_SNAPSHOT_PATH ||
     '/cgi-bin/api.cgi?cmd=Snap&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}'
   ).trim();
+  const reolinkMotionStateUrl = (env.REOLINK_MOTION_STATE_URL || '').trim();
+  const reolinkMotionStatePath = (
+    env.REOLINK_MOTION_STATE_PATH ||
+    '/cgi-bin/api.cgi?cmd=GetMdState&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}'
+  ).trim();
 
   const upcamSnapshotUrl = (env.UPCAM_SNAPSHOT_URL || '').trim();
   const upcamHost = (env.UPCAM_HOST || '').trim().replace(/\/$/, '');
@@ -63,12 +68,14 @@ export function loadIngestConfig(env = process.env) {
     once: parseBool(env.INGEST_ONCE, false),
     reolink: {
       snapshotUrl: reolinkSnapshotUrl,
+      motionStateUrl: reolinkMotionStateUrl,
       host: reolinkHost,
       httpPort: reolinkHttpPort,
       user: reolinkUser,
       password: reolinkPassword,
       channel: reolinkChannel,
       snapshotPath: reolinkSnapshotPath,
+      motionStatePath: reolinkMotionStatePath,
       burst: {
         enabled: parseBool(env.REOLINK_BURST_ENABLED, false),
         count: parsePositiveInt(env.REOLINK_BURST_COUNT, 2),

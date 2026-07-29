@@ -39,8 +39,8 @@ function parseBool(value, defaultValue) {
  */
 export function loadConfig(env = process.env) {
   const timeoutMs = parsePositiveInt(env.NOTIFIER_TIMEOUT_MS, 30000);
-  const imageMaxWidth = parsePositiveInt(env.NOTIFIER_IMAGE_MAX_WIDTH, 1280);
-  const imageJpegQuality = Math.min(100, Math.max(1, parsePositiveInt(env.NOTIFIER_IMAGE_JPEG_QUALITY, 72)));
+  const imageMaxWidth = parsePositiveInt(env.NOTIFIER_IMAGE_MAX_WIDTH, 1920);
+  const imageJpegQuality = Math.min(100, Math.max(1, parsePositiveInt(env.NOTIFIER_IMAGE_JPEG_QUALITY, 88)));
   const telegramToken = (env.TELEGRAM_BOT_TOKEN || '').trim();
   const telegramChatId = (env.TELEGRAM_CHAT_ID || '').trim();
   const ntfyUrl = (env.NTFY_URL || '').trim();

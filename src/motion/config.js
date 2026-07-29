@@ -120,12 +120,12 @@ export function loadMotionConfig(env = process.env) {
     once: parseBool(env.MOTION_ONCE, false),
     // Pixel path: decode image, resize/crop/ROI, then compare grayscale samples.
     imageDecodeEnabled: parseBool(env.MOTION_IMAGE_DECODE_ENABLED, true),
-    resizeWidth: parsePositiveInt(env.MOTION_RESIZE_WIDTH, 384),
+    resizeWidth: parsePositiveInt(env.MOTION_RESIZE_WIDTH, 512),
     cropTopPx: parseNonNegativeInt(env.MOTION_CROP_TOP_PX, 24),
     roiPolygons: parseRoiPolygons(env),
     // delta: fraction of sampled pixels that differ beyond threshold
-    pixelDiffThreshold: parsePositiveInt(env.MOTION_PIXEL_DIFF_THRESHOLD, 17),
-    motionScoreThreshold: parseNumber(env.MOTION_SCORE_THRESHOLD, 0.02),
+    pixelDiffThreshold: parsePositiveInt(env.MOTION_PIXEL_DIFF_THRESHOLD, 12),
+    motionScoreThreshold: parseNumber(env.MOTION_SCORE_THRESHOLD, 0.012),
     sampleStride: parsePositiveInt(env.MOTION_SAMPLE_STRIDE, 16),
     roi: parseRoi(env),
     zones: parseZones(env),

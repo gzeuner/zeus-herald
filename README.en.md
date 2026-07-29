@@ -29,7 +29,7 @@ A tiny-tool.de / TT utility.
 
 - Runs locally without requiring cloud-based camera analysis.
 - No browser automation, no WhatsApp Web, no Chromium process.
-- Pixel-based JPEG analysis instead of raw byte-stream comparison.
+- Reolink camera motion state as primary trigger with optional pixel-based JPEG analysis.
 - Telegram Bot API and ntfy as independent notification channels.
 - Shared image compression before upload.
 - Process locks to prevent duplicate `ingest` or `motion` workers.

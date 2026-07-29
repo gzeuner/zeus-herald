@@ -127,8 +127,8 @@ function contentTypeFromExtension(ext) {
  * @returns {Buffer | null}
  */
 export function compressJpeg(input, compression = {}) {
-  const maxWidth = Math.max(1, Number(compression.maxWidth) || 1280);
-  const quality = Math.min(100, Math.max(1, Number(compression.jpegQuality) || 72));
+  const maxWidth = Math.max(1, Number(compression.maxWidth) || 1920);
+  const quality = Math.min(100, Math.max(1, Number(compression.jpegQuality) || 88));
   let decoded;
   try {
     decoded = jpeg.decode(input, { useTArray: true, maxMemoryUsageInMB: 512 });

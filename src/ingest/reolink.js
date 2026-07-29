@@ -82,7 +82,100 @@ export function buildReolinkSnapshotUrl(cfg, options = {}) {
   const url = new URL(expandedPath, base);
   return url.toString();
 }
+/**
+ * Build Reolink motion-state CGI URL when host + credentials are set.
+ * This is configurable because Reolink exposes motion state unevenly across models/firmware.
+ * @param {{ host: string, httpPort?: number, user: string, password: string, channel: string, motionStateUrl?: string, motionStatePath?: string }} cfg
+ * @param {{ timestamp?: string }} [options]
+ * @returns {string}
+ */
+export function buildReolinkMotionStateUrl(cfg, options = {}) {
+  const timestamp = options.timestamp || String(Date.now());
+  const values = {
+    timestamp,
+    channel: cfg.channel || '0',
+    user: cfg.user || '',
+    password: cfg.password || '',
+  };
 
+  if (cfg.motionStateUrl) {
+    return expandSnapshotTemplate(cfg.motionStateUrl, values);
+  }
+
+  const base = buildBaseUrl(cfg);
+  const rawPath = cfg.motionStatePath ||
+    '/cgi-bin/api.cgi?cmd=GetMdState&channel={channel}&rs={timestamp}&user={usernameEncoded}&password={passwordEncoded}';
+  const expandedPath = expandSnapshotTemplate(rawPath, values);
+  const url = new URL(expandedPath, base);
+  return url.toString();
+}
+/**
+ * @param {unknown} payload
+ * @returns {{ active: boolean, rawState: unknown }}
+ */
+export function parseReolinkMotionState(payload) {
+  const first = Array.isArray(payload) ? payload[0] : payload;
+  if (!first || typeof first !== 'object') return { active: false, rawState: payload };
+  const item = /** @type {Record<string, unknown>} */ (first);
+  if (Number(item.code) !== 0 && item.error) {
+    const error = /** @type {{ detail?: unknown, rspCode?: unknown }} */ (item.error);
+    throw new Error(`reolink_motion_state_error:${error.detail || error.rspCode || item.code}`);
+  }
+
+  const value = item.value && typeof item.value === 'object'
+    ? /** @type {Record<string, unknown>} */ (item.value)
+    : item;
+  const rawState = value.state ?? value.State ?? value.status ?? value.alarm ?? value.motion ?? value.detect;
+  if (typeof rawState === 'number') return { active: rawState > 0, rawState };
+  if (typeof rawState === 'boolean') return { active: rawState, rawState };
+  if (typeof rawState === 'string') {
+    const normalized = rawState.trim().toLowerCase();
+    return {
+      active: ['1', 'true', 'yes', 'on', 'active', 'alarm', 'motion', 'detected'].includes(normalized),
+      rawState,
+    };
+  }
+  return { active: false, rawState };
+}
+
+/**
+ * @param {object} options
+ * @param {ReturnType<import('./config.js').loadIngestConfig>['reolink']} options.config
+ * @param {number} [options.timeoutMs]
+ * @param {typeof fetch} [options.fetchImpl]
+ * @returns {Promise<{ active: boolean, rawState: unknown, payload: unknown }>}
+ */
+export async function fetchReolinkMotionState(options) {
+  const { config, timeoutMs = 15000, fetchImpl = globalThis.fetch } = options;
+  const url = buildReolinkMotionStateUrl(config);
+  const timeout = createTimeout(timeoutMs);
+  try {
+    /** @type {Record<string, string>} */
+    const headers = { Accept: 'application/json,*/*' };
+    if (config.user && config.password && config.motionStateUrl) {
+      const token = Buffer.from(`${config.user}:${config.password}`, 'utf8').toString('base64');
+      headers.Authorization = `Basic ${token}`;
+    }
+
+    const res = await fetchImpl(url, {
+      method: 'GET',
+      headers,
+      signal: timeout.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`reolink_motion_state_http_${res.status}`);
+    }
+
+    const text = await res.text();
+    const payload = JSON.parse(text);
+    return { ...parseReolinkMotionState(payload), payload };
+  } catch (err) {
+    throw new Error(safeErrorMessage(err));
+  } finally {
+    timeout.clear();
+  }
+}
 /**
  * @param {object} options
  * @param {ReturnType<import('./config.js').loadIngestConfig>['reolink']} options.config
@@ -144,13 +237,19 @@ export async function fetchReolinkSnapshot(options) {
  */
 export async function fetchReolinkSnapshots(options) {
   const { config } = options;
+  let motionSignal = null;
+  if (config.burst?.requireSignal) {
+    motionSignal = await fetchReolinkMotionState(options);
+    if (!motionSignal.active) return [];
+  }
+
   const burstCount = config.burst?.enabled ? Math.max(1, config.burst.count || 1) : 1;
   /** @type {Array<{ buffer: Buffer, contentType: string, burstIndex: number, burstCount: number }>} */
   const frames = [];
 
   for (let i = 0; i < burstCount; i += 1) {
     const snapshot = await fetchReolinkSnapshot(options);
-    frames.push({ ...snapshot, burstIndex: i + 1, burstCount });
+    frames.push({ ...snapshot, burstIndex: i + 1, burstCount, motionSignal });
     if (i < burstCount - 1) {
       await delay(config.burst?.intervalMs || 350);
     }
