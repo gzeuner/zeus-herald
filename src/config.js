@@ -41,6 +41,8 @@ export function loadConfig(env = process.env) {
   const timeoutMs = parsePositiveInt(env.NOTIFIER_TIMEOUT_MS, 30000);
   const imageMaxWidth = parsePositiveInt(env.NOTIFIER_IMAGE_MAX_WIDTH, 1920);
   const imageJpegQuality = Math.min(100, Math.max(1, parsePositiveInt(env.NOTIFIER_IMAGE_JPEG_QUALITY, 88)));
+  const captionLocale = (env.NOTIFIER_CAPTION_LOCALE || '').trim();
+  const captionTimeZone = (env.NOTIFIER_CAPTION_TIME_ZONE || '').trim();
   const telegramToken = (env.TELEGRAM_BOT_TOKEN || '').trim();
   const telegramChatId = (env.TELEGRAM_CHAT_ID || '').trim();
   const ntfyUrl = (env.NTFY_URL || '').trim();
@@ -70,6 +72,11 @@ export function loadConfig(env = process.env) {
         enabled: parseBool(env.NOTIFIER_IMAGE_COMPRESSION_ENABLED, true),
         maxWidth: imageMaxWidth,
         jpegQuality: imageJpegQuality,
+      },
+      caption: {
+        debug: parseBool(env.NOTIFIER_CAPTION_DEBUG, false),
+        locale: captionLocale,
+        timeZone: captionTimeZone,
       },
     },
   };

@@ -47,3 +47,20 @@ test('notifier image compression can be configured', () => {
   assert.equal(cfg.notifier.imageCompression.maxWidth, 640);
   assert.equal(cfg.notifier.imageCompression.jpegQuality, 60);
 });
+test('notifier caption defaults to date-only mode without debug', () => {
+  const cfg = loadConfig({});
+  assert.equal(cfg.notifier.caption.debug, false);
+  assert.equal(cfg.notifier.caption.locale, '');
+  assert.equal(cfg.notifier.caption.timeZone, '');
+});
+
+test('notifier caption debug locale and time zone can be configured', () => {
+  const cfg = loadConfig({
+    NOTIFIER_CAPTION_DEBUG: 'true',
+    NOTIFIER_CAPTION_LOCALE: 'de-DE',
+    NOTIFIER_CAPTION_TIME_ZONE: 'Europe/Berlin',
+  });
+  assert.equal(cfg.notifier.caption.debug, true);
+  assert.equal(cfg.notifier.caption.locale, 'de-DE');
+  assert.equal(cfg.notifier.caption.timeZone, 'Europe/Berlin');
+});

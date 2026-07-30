@@ -147,15 +147,22 @@ NTFY_TOKEN=<bearer-token>
 
 A public `ntfy.sh` topic without a token is only as private as the topic name. Use a private server or token for stronger access control.
 
-## Image Compression
+## Image Compression and Captions
 
 ```env
 NOTIFIER_IMAGE_COMPRESSION_ENABLED=true
 NOTIFIER_IMAGE_MAX_WIDTH=1920
 NOTIFIER_IMAGE_JPEG_QUALITY=88
+NOTIFIER_CAPTION_DEBUG=false
+NOTIFIER_CAPTION_LOCALE=
+NOTIFIER_CAPTION_TIME_ZONE=
 ```
 
 Compression happens centrally before Telegram or ntfy receives the image. If compression fails, the original image is used so notification delivery does not fail solely because of the encoder.
+
+The default caption under each image is the creation timestamp with date and time. Without `NOTIFIER_CAPTION_LOCALE` and `NOTIFIER_CAPTION_TIME_ZONE`, Node.js uses the automatically detected runtime locale and time zone. Fixed values such as `de-DE` and `Europe/Berlin` can be set when needed.
+
+`NOTIFIER_CAPTION_DEBUG=true` extends the caption with technical data for analysis and tuning: camera, source, filename, motion reason, score, changed and compared pixels, brightness, zone status, image/work dimensions, ROI values, camera motion signal, burst position, and the original internal caption.
 
 ## Cleanup
 
