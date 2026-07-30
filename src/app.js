@@ -46,7 +46,7 @@ export function createApp(options = {}) {
   const runtime = loadRuntimeOptions(env);
 
   const notifiers = createNotifiers(config, { fetchImpl: options.fetchImpl });
-  const hub = createNotifierHub(notifiers);
+  const hub = createNotifierHub(notifiers, { captionOptions: config.notifier.caption });
   const queue = new BoundedQueue({
     maxSize: runtime.queueMaxSize,
     dropPolicy: runtime.dropPolicy,
@@ -61,7 +61,7 @@ export function createApp(options = {}) {
   let heartbeatTimer = null;
 
   /**
-   * Enqueue a notify job (path only — no image buffers in the queue).
+   * Enqueue a notify job (path only - no image buffers in the queue).
    * @param {string} imagePath
    * @param {string} [caption]
    * @param {Record<string, unknown>} [metadata]

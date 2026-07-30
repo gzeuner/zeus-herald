@@ -9,6 +9,7 @@ import { createNotifiers, createNotifierHub } from '../src/notifiers/hub.js';
 import { loadConfig } from '../src/config.js';
 import { redact, setRedactions } from '../src/logger.js';
 import { loadImageFile, truncateCaption } from '../src/notifiers/base.js';
+import { buildNotificationCaption } from '../src/notifiers/caption.js';
 import jpeg from 'jpeg-js';
 
 /** minimal JPEG-ish bytes (not a real image, but file present for upload path) */
@@ -38,6 +39,65 @@ async function withTempImage(fn) {
   }
 }
 
+describe('notification captions', () => {
+  test('default caption is only localized date and time', async () => {
+    await withTempImage(async (imagePath) => {
+      const caption = await buildNotificationCaption({
+        imagePath,
+        caption: 'motion score=1',
+        metadata: { capturedAt: '2026-07-29T20:15:30.000Z', camera: 'front' },
+        captionOptions: { locale: 'de-DE', timeZone: 'Europe/Berlin' },
+      });
+
+      assert.equal(caption, '29.07.2026, 22:15:30');
+    });
+  });
+
+  test('debug caption adds useful technical metadata', async () => {
+    await withTempImage(async (imagePath) => {
+      const caption = await buildNotificationCaption({
+        imagePath,
+        caption: 'motion motion score=0.2',
+        metadata: {
+          capturedAt: '2026-07-29T20:15:30.000Z',
+          camera: 'front',
+          source: 'reolink',
+          burstIndex: 2,
+          burstCount: 4,
+          cameraMotionSignal: true,
+          cameraMotionRawState: 1,
+          decision: {
+            reason: 'motion',
+            metrics: {
+              score: 0.23456789,
+              changed: 42,
+              compared: 100,
+              brightness: 88.123456,
+              zonePass: true,
+              mode: 'image',
+              image: {
+                width: 512,
+                height: 288,
+                sourceWidth: 1920,
+                sourceHeight: 1080,
+                roiPixels: 120000,
+                maskedOut: 2048,
+              },
+            },
+          },
+        },
+        captionOptions: { debug: true, locale: 'en-US', timeZone: 'UTC' },
+      });
+
+      assert.match(caption, /^Jul 29, 2026, 8:15:30 PM/);
+      assert.match(caption, /camera=front source=reolink file=shot\.jpg/);
+      assert.match(caption, /reason=motion score=0\.234568 changed=42 compared=100/);
+      assert.match(caption, /mode=image work=512x288 source=1920x1080/);
+      assert.match(caption, /cameraMotion=true rawState=1/);
+      assert.match(caption, /burst=2\/4 caption=motion motion score=0\.2/);
+    });
+  });
+});
 describe('telegram adapter', () => {
   test('send success returns remoteId', async () => {
     await withTempImage(async (imagePath) => {
@@ -152,7 +212,7 @@ describe('hub', () => {
         NTFY_URL: 'https://ntfy.sh/t',
       });
       let call = 0;
-      const fetchImpl = async (url) => {
+      const fetchImpl = async (url, init = {}) => {
         call += 1;
         if (String(url).includes('api.telegram.org')) {
           return {
@@ -161,6 +221,7 @@ describe('hub', () => {
             json: async () => ({ ok: false, description: 'down' }),
           };
         }
+        assert.equal(init.headers.Message, '29.07.2026, 22:15:30');
         return {
           ok: true,
           status: 200,
@@ -169,8 +230,12 @@ describe('hub', () => {
       };
       const notifiers = createNotifiers(config, { fetchImpl });
       assert.equal(notifiers.length, 2);
-      const hub = createNotifierHub(notifiers);
-      const outcome = await hub.sendAcceptedFrame(imagePath, 'cap');
+      const hub = createNotifierHub(notifiers, {
+        captionOptions: { locale: 'de-DE', timeZone: 'Europe/Berlin' },
+      });
+      const outcome = await hub.sendAcceptedFrame(imagePath, 'cap', {
+        capturedAt: '2026-07-29T20:15:30.000Z',
+      });
       assert.equal(outcome.ok, true);
       assert.equal(outcome.results.length, 2);
       assert.ok(outcome.results.some((r) => r.ok));
@@ -179,7 +244,7 @@ describe('hub', () => {
     });
   });
 
-  test('no notifiers → not ok', async () => {
+  test('no notifiers -> not ok', async () => {
     const hub = createNotifierHub([]);
     const outcome = await hub.sendAcceptedFrame('/tmp/x.jpg');
     assert.equal(outcome.ok, false);

@@ -1,5 +1,6 @@
 import { createTelegramNotifier } from './telegram.js';
 import { createNtfyNotifier } from './ntfy.js';
+import { buildNotificationCaption } from './caption.js';
 import { logger } from '../logger.js';
 
 /**
@@ -58,10 +59,11 @@ export function createNotifiers(config, deps = {}) {
 
 /**
  * @param {Notifier[]} notifiers
+ * @param {{ captionOptions?: import('./caption.js').CaptionOptions }} [options]
  */
-export function createNotifierHub(notifiers) {
+export function createNotifierHub(notifiers, options = {}) {
   /**
-   * Fan-out send: isolated failures, overall ok if ≥1 success.
+   * Fan-out send: isolated failures, overall ok if at least one success.
    * @param {string} imagePath
    * @param {string} [caption]
    * @param {Record<string, unknown>} [metadata]
@@ -73,7 +75,13 @@ export function createNotifierHub(notifiers) {
       return { ok: false, results: [], error: 'no_notifiers_enabled' };
     }
 
-    const payload = { imagePath, caption, metadata };
+    const renderedCaption = await buildNotificationCaption({
+      imagePath,
+      caption,
+      metadata,
+      captionOptions: options.captionOptions,
+    });
+    const payload = { imagePath, caption: renderedCaption, metadata };
     const settled = await Promise.allSettled(
       notifiers.map((n) => n.send(payload)),
     );

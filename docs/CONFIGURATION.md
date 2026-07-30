@@ -147,15 +147,22 @@ NTFY_TOKEN=<bearer-token>
 
 Ein oeffentliches `ntfy.sh`-Topic ohne Token ist nur so privat wie der Topic-Name. Fuer staerkere Zugriffskontrolle einen privaten Server oder Token verwenden.
 
-## Bildkompression
+## Bildkompression und Bildtext
 
 ```env
 NOTIFIER_IMAGE_COMPRESSION_ENABLED=true
 NOTIFIER_IMAGE_MAX_WIDTH=1920
 NOTIFIER_IMAGE_JPEG_QUALITY=88
+NOTIFIER_CAPTION_DEBUG=false
+NOTIFIER_CAPTION_LOCALE=
+NOTIFIER_CAPTION_TIME_ZONE=
 ```
 
 Die Kompression erfolgt zentral, bevor Telegram oder ntfy das Bild erhalten. Wenn Kompression fehlschlaegt, wird das Originalbild verwendet, damit die Benachrichtigung nicht allein am Encoder scheitert.
+
+Der Standard-Bildtext unter jedem Bild ist der Erstellungszeitpunkt mit Datum und Uhrzeit. Ohne `NOTIFIER_CAPTION_LOCALE` und `NOTIFIER_CAPTION_TIME_ZONE` verwendet Node.js die automatisch ermittelte Runtime-Locale und Zeitzone. Bei Bedarf koennen feste Werte wie `de-DE` und `Europe/Berlin` gesetzt werden.
+
+`NOTIFIER_CAPTION_DEBUG=true` erweitert den Bildtext um technische Daten fuer Analyse und Feintuning: Kamera, Quelle, Dateiname, Motion-Grund, Score, geaenderte und verglichene Pixel, Helligkeit, Zonenstatus, Bild-/Arbeitsgroesse, ROI-Werte, Kamera-Motion-Signal, Burst-Position und urspruengliche interne Caption.
 
 ## Cleanup
 
