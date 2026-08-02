@@ -1,6 +1,7 @@
 import {
   createTimeout,
   loadImageFile,
+  releaseResponseBody,
   safeErrorMessage,
   sendResult,
   truncateCaption,
@@ -38,6 +39,8 @@ export function createTelegramNotifier(options) {
   async function send(payload) {
     const started = Date.now();
     const timeout = createTimeout(timeoutMs);
+    /** @type {Response | null} */
+    let response = null;
     try {
       const { buffer, filename, contentType } = await loadImageFile(payload.imagePath, imageCompression);
       const form = new FormData();
@@ -48,11 +51,12 @@ export function createTelegramNotifier(options) {
       form.append('photo', blob, filename);
 
       const url = `${TELEGRAM_API}/bot${botToken}/sendPhoto`;
-      const res = await fetchImpl(url, {
+      response = await fetchImpl(url, {
         method: 'POST',
         body: form,
         signal: timeout.signal,
       });
+      const res = response;
 
       const durationMs = Date.now() - started;
       /** @type {any} */
@@ -88,6 +92,7 @@ export function createTelegramNotifier(options) {
         durationMs: Date.now() - started,
       });
     } finally {
+      await releaseResponseBody(response);
       timeout.clear();
     }
   }
@@ -97,9 +102,12 @@ export function createTelegramNotifier(options) {
    */
   async function health() {
     const timeout = createTimeout(timeoutMs);
+    /** @type {Response | null} */
+    let response = null;
     try {
       const url = `${TELEGRAM_API}/bot${botToken}/getMe`;
-      const res = await fetchImpl(url, { method: 'GET', signal: timeout.signal });
+      response = await fetchImpl(url, { method: 'GET', signal: timeout.signal });
+      const res = response;
       /** @type {any} */
       let body = null;
       try {
@@ -118,6 +126,7 @@ export function createTelegramNotifier(options) {
     } catch (err) {
       return { ok: false, detail: safeErrorMessage(err) };
     } finally {
+      await releaseResponseBody(response);
       timeout.clear();
     }
   }

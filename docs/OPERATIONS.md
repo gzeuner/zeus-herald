@@ -49,6 +49,14 @@ DECISION_LOG=1
 DECISION_LOG_FILE=logs/decisions.ndjson
 ```
 
+Bei Verdacht auf ein Speicher- oder Ressourcenproblem kann temporaer zusaetzliche Telemetrie aktiviert werden:
+
+```env
+TECHNICAL_LOGGING=1
+```
+
+Dann wird bei jedem Heartbeat ein `runtime_telemetry`-Eintrag mit RSS/Heap/externem Speicher, Queue, aktiven Handle-Typen, Requests und Prozessressourcen geschrieben. Nach der Analyse wieder auf `0` setzen.
+
 Ingest kann `.json`-Sidecars neben empfangenen Bildern schreiben. Bei Reolink enthalten diese optional den Kamera-Motion-State. Motion liest diese Sidecars und schreibt nach der Verarbeitung `.decision.json`-Sidecars neben verschobenen Bildern. Diese Dateien helfen beim Tuning und werden mit dem Bild-Cleanup entfernt, wenn `.json` in `CLEANUP_IMAGE_EXTENSIONS` enthalten ist.
 
 ## Bildordner

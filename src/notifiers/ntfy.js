@@ -1,6 +1,7 @@
 import {
   createTimeout,
   loadImageFile,
+  releaseResponseBody,
   safeErrorMessage,
   sendResult,
   truncateCaption,
@@ -113,6 +114,7 @@ export function createNtfyNotifier(options) {
         headers: withAuth({}),
         signal: timeout.signal,
       });
+      await releaseResponseBody(res);
       // 2xx/4xx means host is reachable; 401/403 still "up" but auth issue.
       if (res.status >= 500) {
         return { ok: false, detail: `http_${res.status}` };
