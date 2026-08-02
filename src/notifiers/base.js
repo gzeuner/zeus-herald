@@ -78,6 +78,63 @@ export function createTimeout(timeoutMs) {
 }
 
 /**
+ * Release an HTTP response whose body is intentionally not needed.
+ * Undici cannot reliably reuse the connection until the body is consumed or
+ * cancelled. This is especially important for periodic health checks and
+ * error responses in long-running processes.
+ * @param {{ body?: { cancel?: () => Promise<unknown> | unknown } } | null | undefined} response
+ * @returns {Promise<void>}
+ */
+export async function releaseResponseBody(response) {
+  try {
+    if (response?.body?.cancel) await response.body.cancel();
+  } catch {
+    // The request has already completed; there is nothing useful to recover.
+  }
+}
+
+/**
+ * Read an HTTP response while enforcing an upper bound on body size.
+ * @param {{ arrayBuffer?: () => Promise<ArrayBuffer>, body?: ReadableStream<Uint8Array> | null }} response
+ * @param {number} maxBytes
+ * @returns {Promise<ArrayBuffer>}
+ */
+export async function readResponseArrayBufferLimited(response, maxBytes) {
+  const limit = Math.max(1, Number(maxBytes) || 1);
+  if (!response.body?.getReader) {
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > limit) throw new Error(`response_body_too_large:${buffer.byteLength}`);
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel();
+        throw new Error(`response_body_too_large:${total}`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output.buffer;
+}
+
+/**
  * @param {string} imagePath
  * @param {ImageCompressionOptions} [compression]
  * @returns {Promise<{ buffer: Buffer, filename: string, contentType: string, originalBytes: number, compressed: boolean }>}

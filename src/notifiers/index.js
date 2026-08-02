@@ -6,6 +6,8 @@ export {
   sendResult,
   safeErrorMessage,
   createTimeout,
+  releaseResponseBody,
+  readResponseArrayBufferLimited,
   loadImageFile,
   compressJpeg,
   truncateCaption,

@@ -17,6 +17,8 @@ export function loadRuntimeOptions(env = process.env) {
   const heartbeatMs = Number.parseInt(env.HEARTBEAT_MS || '60000', 10);
   const shutdownTimeoutMs = Number.parseInt(env.SHUTDOWN_TIMEOUT_MS || '15000', 10);
   const dropPolicy = env.QUEUE_DROP_POLICY === 'reject' ? 'reject' : 'drop_oldest';
+  const technicalLoggingEnabled =
+    env.TECHNICAL_LOGGING === '1' || String(env.TECHNICAL_LOGGING).toLowerCase() === 'true';
 
   return {
     queueMaxSize: Number.isFinite(maxSize) && maxSize > 0 ? maxSize : 100,
@@ -30,6 +32,7 @@ export function loadRuntimeOptions(env = process.env) {
     decisionLogEnabled:
       env.DECISION_LOG === '1' || String(env.DECISION_LOG).toLowerCase() === 'true',
     decisionLogFile: env.DECISION_LOG_FILE || 'logs/decisions.ndjson',
+    technicalLoggingEnabled,
   };
 }
 
@@ -55,10 +58,13 @@ export function createApp(options = {}) {
     healthFile: runtime.healthFile,
     decisionLogEnabled: runtime.decisionLogEnabled,
     decisionLogFile: runtime.decisionLogFile,
+    technicalLoggingEnabled: runtime.technicalLoggingEnabled,
   });
 
   /** @type {ReturnType<typeof setInterval> | null} */
   let heartbeatTimer = null;
+  /** @type {Promise<void> | null} */
+  let heartbeatPromise = null;
 
   /**
    * Enqueue a notify job (path only - no image buffers in the queue).
@@ -85,7 +91,11 @@ export function createApp(options = {}) {
   }
 
   async function tickHeartbeat() {
-    await supervisor.heartbeat({ hub, queue });
+    if (heartbeatPromise) return heartbeatPromise;
+    heartbeatPromise = supervisor.heartbeat({ hub, queue }).finally(() => {
+      heartbeatPromise = null;
+    });
+    return heartbeatPromise;
   }
 
   function startHeartbeat() {
@@ -99,8 +109,8 @@ export function createApp(options = {}) {
 
   function stopHeartbeat() {
     if (heartbeatTimer) {
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
     }
   }
 
@@ -119,6 +129,7 @@ export function createApp(options = {}) {
   async function stop() {
     supervisor.markStopping();
     stopHeartbeat();
+    if (heartbeatPromise) await heartbeatPromise;
     queue.stopAccepting();
     await queue.whenIdle();
     supervisor.recordQueueMetrics(queue.metrics());

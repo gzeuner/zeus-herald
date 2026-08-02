@@ -160,6 +160,39 @@ describe('telegram adapter', () => {
     assert.equal(h.ok, true);
     assert.match(h.detail, /zeus_bot/);
   });
+
+  test('telegram health releases unusual response bodies', async () => {
+    let cancelled = 0;
+    const n = createTelegramNotifier({
+      botToken: 'SECRET_TOKEN',
+      chatId: '99',
+      fetchImpl: async () => ({
+        ok: false,
+        status: 502,
+        json: async () => { throw new Error('invalid json'); },
+        body: { cancel: async () => { cancelled += 1; } },
+      }),
+    });
+
+    const h = await n.health();
+    assert.equal(h.ok, false);
+    assert.equal(cancelled, 1);
+  });
+
+  test('ntfy health releases the response body', async () => {
+    let cancelled = 0;
+    const n = createNtfyNotifier({
+      url: 'https://ntfy.sh/zeus-test',
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        body: { cancel: async () => { cancelled += 1; } },
+      }),
+    });
+
+    await n.health();
+    assert.equal(cancelled, 1);
+  });
 });
 
 describe('ntfy adapter', () => {

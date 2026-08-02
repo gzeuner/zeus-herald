@@ -1,4 +1,4 @@
-import { createTimeout, safeErrorMessage } from '../notifiers/base.js';
+import { createTimeout, readResponseArrayBufferLimited, releaseResponseBody, safeErrorMessage } from '../notifiers/base.js';
 
 /**
  * @param {{ host: string, user: string, password: string, snapshotUrl: string }} cfg
@@ -41,10 +41,11 @@ export async function fetchUpcamSnapshot(options) {
     });
 
     if (!res.ok) {
+      await releaseResponseBody(res);
       throw new Error(`upcam_http_${res.status}`);
     }
 
-    const ab = await res.arrayBuffer();
+    const ab = await readResponseArrayBufferLimited(res, config.maxImageBytes || 10 * 1024 * 1024);
     const buffer = Buffer.from(ab);
     if (buffer.length < 100) {
       throw new Error('upcam_empty_or_tiny_body');

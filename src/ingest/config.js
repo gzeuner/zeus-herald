@@ -56,6 +56,7 @@ export function loadIngestConfig(env = process.env) {
   const upcamHost = (env.UPCAM_HOST || '').trim().replace(/\/$/, '');
   const upcamUser = (env.UPCAM_USER || env.UPCAM_USERNAME || '').trim();
   const upcamPassword = (env.UPCAM_PASSWORD || '').trim();
+  const maxImageBytes = parsePositiveInt(env.INGEST_MAX_IMAGE_BYTES, 10 * 1024 * 1024);
 
   return {
     cameraType,
@@ -64,6 +65,7 @@ export function loadIngestConfig(env = process.env) {
     targetDir: (env.INGEST_TARGET_DIR || 'images/received').trim() || 'images/received',
     intervalMs: parsePositiveInt(env.INGEST_INTERVAL_MS, 5000),
     timeoutMs: parsePositiveInt(env.INGEST_TIMEOUT_MS, 15000),
+    maxImageBytes,
     writeMetadata: parseBool(env.INGEST_WRITE_METADATA, true),
     once: parseBool(env.INGEST_ONCE, false),
     reolink: {

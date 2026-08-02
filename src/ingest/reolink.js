@@ -1,4 +1,4 @@
-import { createTimeout, safeErrorMessage } from '../notifiers/base.js';
+import { createTimeout, readResponseArrayBufferLimited, releaseResponseBody, safeErrorMessage } from '../notifiers/base.js';
 
 /**
  * @param {string} template
@@ -164,6 +164,7 @@ export async function fetchReolinkMotionState(options) {
     });
 
     if (!res.ok) {
+      await releaseResponseBody(res);
       throw new Error(`reolink_motion_state_http_${res.status}`);
     }
 
@@ -203,10 +204,11 @@ export async function fetchReolinkSnapshot(options) {
     });
 
     if (!res.ok) {
+      await releaseResponseBody(res);
       throw new Error(`reolink_http_${res.status}`);
     }
 
-    const ab = await res.arrayBuffer();
+    const ab = await readResponseArrayBufferLimited(res, config.maxImageBytes || 10 * 1024 * 1024);
     const buffer = Buffer.from(ab);
     if (buffer.length < 100) {
       throw new Error('reolink_empty_or_tiny_body');

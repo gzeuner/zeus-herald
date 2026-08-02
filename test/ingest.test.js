@@ -259,11 +259,13 @@ describe('reolink / upcam clients', () => {
   });
 
   test('fetchReolinkSnapshot maps HTTP error', async () => {
+    let cancelled = 0;
     const fetchImpl = async () => ({
       ok: false,
       status: 401,
       headers: { get: () => null },
       arrayBuffer: async () => new ArrayBuffer(0),
+      body: { cancel: async () => { cancelled += 1; } },
     });
     await assert.rejects(
       () =>
@@ -279,6 +281,7 @@ describe('reolink / upcam clients', () => {
         }),
       /reolink_http_401|401/,
     );
+    assert.equal(cancelled, 1);
   });
   test('fetchReolinkSnapshot rejects Reolink JSON error bodies', async () => {
     const payload = JSON.stringify([
@@ -304,6 +307,29 @@ describe('reolink / upcam clients', () => {
           fetchImpl,
         }),
       /reolink_non_image_response:login failed/,
+    );
+  });
+
+  test('fetchReolinkSnapshot rejects oversized response bodies', async () => {
+    const fetchImpl = async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new Uint8Array(1024).buffer,
+    });
+    await assert.rejects(
+      () => fetchReolinkSnapshot({
+        config: {
+          snapshotUrl: 'http://cam/snap',
+          host: '',
+          user: '',
+          password: '',
+          channel: '0',
+          maxImageBytes: 100,
+        },
+        fetchImpl,
+      }),
+      /response_body_too_large/,
     );
   });
 

@@ -3,6 +3,27 @@ import path from 'node:path';
 import { logger } from './logger.js';
 
 /**
+ * Best-effort diagnostic counts. These Node diagnostics are intentionally
+ * sampled only when technical logging is enabled.
+ * @returns {{ handleCount: number, handleTypes: Record<string, number>, requestCount: number }}
+ */
+function activeResourceCounts() {
+  const handles = typeof process._getActiveHandles === 'function'
+    ? process._getActiveHandles()
+    : [];
+  const requests = typeof process._getActiveRequests === 'function'
+    ? process._getActiveRequests()
+    : [];
+  /** @type {Record<string, number>} */
+  const handleTypes = {};
+  for (const handle of handles) {
+    const type = handle?.constructor?.name || typeof handle;
+    handleTypes[type] = (handleTypes[type] || 0) + 1;
+  }
+  return { handleCount: handles.length, handleTypes, requestCount: requests.length };
+}
+
+/**
  * Lightweight runtime supervisor: health file + counters + optional decision log.
  */
 export class RuntimeSupervisor {
@@ -11,6 +32,7 @@ export class RuntimeSupervisor {
    * @param {string} [options.healthFile]
    * @param {string} [options.decisionLogFile]
    * @param {boolean} [options.decisionLogEnabled]
+   * @param {boolean} [options.technicalLoggingEnabled]
    */
   constructor(options = {}) {
     this.healthFile = path.resolve(options.healthFile || 'state/health.json');
@@ -18,6 +40,7 @@ export class RuntimeSupervisor {
       options.decisionLogFile || 'logs/decisions.ndjson',
     );
     this.decisionLogEnabled = Boolean(options.decisionLogEnabled);
+    this.technicalLoggingEnabled = Boolean(options.technicalLoggingEnabled);
     this.startedAt = Date.now();
     /** @type {'starting'|'running'|'stopping'|'stopped'} */
     this.status = 'starting';
@@ -27,7 +50,10 @@ export class RuntimeSupervisor {
     this.sendOkCount = 0;
     this.sendFailCount = 0;
     this.rssBytes = 0;
+    this.heapTotalBytes = 0;
     this.heapUsedBytes = 0;
+    this.externalBytes = 0;
+    this.arrayBuffersBytes = 0;
     /** @type {object | null} */
     this.lastNotifierHealth = null;
     /** @type {object | null} */
@@ -52,7 +78,10 @@ export class RuntimeSupervisor {
    */
   sampleMemory(mem = process.memoryUsage()) {
     this.rssBytes = mem.rss;
+    this.heapTotalBytes = mem.heapTotal;
     this.heapUsedBytes = mem.heapUsed;
+    this.externalBytes = mem.external;
+    this.arrayBuffersBytes = mem.arrayBuffers;
   }
 
   /**
@@ -112,7 +141,10 @@ export class RuntimeSupervisor {
       sendFailCount: this.sendFailCount,
       memory: {
         rssBytes: this.rssBytes,
+        heapTotalBytes: this.heapTotalBytes,
         heapUsedBytes: this.heapUsedBytes,
+        externalBytes: this.externalBytes,
+        arrayBuffersBytes: this.arrayBuffersBytes,
       },
       queue: this.lastQueueMetrics,
       notifiers: this.lastNotifierHealth,
@@ -159,6 +191,21 @@ export class RuntimeSupervisor {
         rssBytes: this.rssBytes,
         queueDepth: this.lastQueueMetrics?.depth,
       });
+      if (this.technicalLoggingEnabled) {
+        logger.info('runtime_telemetry', {
+          uptimeMs: Date.now() - this.startedAt,
+          memory: {
+            rssBytes: this.rssBytes,
+            heapTotalBytes: this.heapTotalBytes,
+            heapUsedBytes: this.heapUsedBytes,
+            externalBytes: this.externalBytes,
+            arrayBuffersBytes: this.arrayBuffersBytes,
+          },
+          queue: this.lastQueueMetrics,
+          activeHandles: activeResourceCounts(),
+          resourceUsage: process.resourceUsage(),
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.recordError(msg);

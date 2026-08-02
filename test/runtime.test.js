@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { BoundedQueue } from '../src/queue.js';
 import { RuntimeSupervisor } from '../src/runtimeSupervisor.js';
-import { createApp } from '../src/app.js';
+import { createApp, loadRuntimeOptions } from '../src/app.js';
 import { installGracefulShutdown } from '../src/shutdown.js';
 import { EventEmitter } from 'node:events';
 
@@ -84,6 +84,12 @@ describe('BoundedQueue', () => {
 });
 
 describe('RuntimeSupervisor', () => {
+  test('technical logging is opt-in', () => {
+    assert.equal(loadRuntimeOptions({}).technicalLoggingEnabled, false);
+    assert.equal(loadRuntimeOptions({ TECHNICAL_LOGGING: '1' }).technicalLoggingEnabled, true);
+    assert.equal(loadRuntimeOptions({ TECHNICAL_LOGGING: 'true' }).technicalLoggingEnabled, true);
+  });
+
   test('writes health file atomically', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'zeus-health-'));
     const healthFile = path.join(dir, 'health.json');

@@ -192,3 +192,5 @@ Standardmaessig werden Bilder und JSON-Sidecars nach 36 Stunden entfernt. Logs w
 | `SHUTDOWN_TIMEOUT_MS` | Zeit fuer geordneten Shutdown. |
 | `DECISION_LOG` | Aktiviert optionales NDJSON-Decision-Log. |
 | `DECISION_LOG_FILE` | Pfad fuer das Decision-Log. |
+| `TECHNICAL_LOGGING` | Aktiviert optionales Ressourcen-Telemetrie-Logging bei jedem Heartbeat (Speicher, Queue, aktive Handles/Requests und Prozessressourcen). Standardmaessig deaktiviert. |
+| `INGEST_MAX_IMAGE_BYTES` | Maximale Größe eines Kamera-Response-Bodys; größere Antworten werden verworfen. Standard: 10 MiB. |
