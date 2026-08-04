@@ -5,7 +5,7 @@
 import { createApp } from './app.js';
 import { logger } from './logger.js';
 
-export const version = '0.2.0-alpha.3';
+export const version = '1.1.0';
 
 export { loadConfig, secretValues } from './config.js';
 export { createNotifiers, createNotifierHub } from './notifiers/index.js';
