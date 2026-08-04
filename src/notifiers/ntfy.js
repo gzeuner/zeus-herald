@@ -6,6 +6,7 @@ import {
   sendResult,
   truncateCaption,
 } from './base.js';
+import { createRequestGate } from '../http/requestGate.js';
 
 /**
  * @param {object} options
@@ -29,6 +30,7 @@ export function createNtfyNotifier(options) {
   }
 
   const name = 'ntfy';
+  const requestGate = createRequestGate({ maxConcurrent: 1 });
 
   /**
    * @param {Record<string, string>} base
@@ -46,9 +48,10 @@ export function createNtfyNotifier(options) {
    * @returns {Promise<import('./base.js').SendResult>}
    */
   async function send(payload) {
-    const started = Date.now();
-    const timeout = createTimeout(timeoutMs);
-    try {
+    return requestGate.run(async () => {
+      const started = Date.now();
+      const timeout = createTimeout(timeoutMs);
+      try {
       const { buffer, filename, contentType } = await loadImageFile(payload.imagePath, imageCompression);
       const caption = truncateCaption(payload.caption, 4096);
       const title =
@@ -97,17 +100,19 @@ export function createNtfyNotifier(options) {
         error: safeErrorMessage(err),
         durationMs: Date.now() - started,
       });
-    } finally {
-      timeout.clear();
-    }
+      } finally {
+        timeout.clear();
+      }
+    });
   }
 
   /**
    * @returns {Promise<import('./base.js').HealthResult>}
    */
   async function health() {
-    const timeout = createTimeout(Math.min(timeoutMs, 10000));
-    try {
+    return requestGate.run(async () => {
+      const timeout = createTimeout(Math.min(timeoutMs, 10000));
+      try {
       // HEAD may be unsupported; GET with short timeout is acceptable for health.
       const res = await fetchImpl(url, {
         method: 'GET',
@@ -125,9 +130,10 @@ export function createNtfyNotifier(options) {
       return { ok: true, detail: `http_${res.status}` };
     } catch (err) {
       return { ok: false, detail: safeErrorMessage(err) };
-    } finally {
-      timeout.clear();
-    }
+      } finally {
+        timeout.clear();
+      }
+    });
   }
 
   return { name, send, health };
