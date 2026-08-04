@@ -6,6 +6,7 @@ import {
   sendResult,
   truncateCaption,
 } from './base.js';
+import { createRequestGate } from '../http/requestGate.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 
@@ -31,13 +32,15 @@ export function createTelegramNotifier(options) {
   }
 
   const name = 'telegram';
+  const requestGate = createRequestGate({ maxConcurrent: 1 });
 
   /**
    * @param {import('./base.js').NotifyPayload} payload
    * @returns {Promise<import('./base.js').SendResult>}
    */
   async function send(payload) {
-    const started = Date.now();
+    return requestGate.run(async () => {
+      const started = Date.now();
     const timeout = createTimeout(timeoutMs);
     /** @type {Response | null} */
     let response = null;
@@ -95,13 +98,15 @@ export function createTelegramNotifier(options) {
       await releaseResponseBody(response);
       timeout.clear();
     }
+    });
   }
 
   /**
    * @returns {Promise<import('./base.js').HealthResult>}
    */
   async function health() {
-    const timeout = createTimeout(timeoutMs);
+    return requestGate.run(async () => {
+      const timeout = createTimeout(timeoutMs);
     /** @type {Response | null} */
     let response = null;
     try {
@@ -129,6 +134,7 @@ export function createTelegramNotifier(options) {
       await releaseResponseBody(response);
       timeout.clear();
     }
+    });
   }
 
   return { name, send, health };

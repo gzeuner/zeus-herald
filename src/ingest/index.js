@@ -8,6 +8,7 @@ import { fetchUpcamSnapshot } from './upcam.js';
 import { writeReceivedFrame } from './writer.js';
 import { logger, setRedactions } from '../logger.js';
 import { createApp } from '../app.js';
+import { createRequestGate } from '../http/requestGate.js';
 
 export { loadIngestConfig, ingestSecretValues } from './config.js';
 export { writeReceivedFrame } from './writer.js';
@@ -40,8 +41,10 @@ export function createIngest(options = {}) {
   applyRedactions(env, config);
 
   const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const requestGate = createRequestGate({ maxConcurrent: 1 });
   let app = options.app ?? null;
   let stopped = false;
+  let failureStreak = 0;
   /** @type {ReturnType<typeof setTimeout> | null} */
   let timer = null;
 
@@ -49,27 +52,28 @@ export function createIngest(options = {}) {
    * @param {string} [requestId]
    */
   async function captureOnce(requestId) {
-    const source = config.cameraType;
-    const frames = source === 'reolink'
-      ? await fetchReolinkSnapshots({
-          config: config.reolink,
-          timeoutMs: config.timeoutMs,
-          fetchImpl,
-        })
-      : [
-          {
-            ...(await fetchUpcamSnapshot({
-              config: config.upcam,
-              timeoutMs: config.timeoutMs,
-              fetchImpl,
-            })),
-            burstIndex: 1,
-            burstCount: 1,
-          },
-        ];
+    return requestGate.run(async () => {
+      const source = config.cameraType;
+      const frames = source === 'reolink'
+        ? await fetchReolinkSnapshots({
+            config: config.reolink,
+            timeoutMs: config.timeoutMs,
+            fetchImpl,
+          })
+        : [
+            {
+              ...(await fetchUpcamSnapshot({
+                config: config.upcam,
+                timeoutMs: config.timeoutMs,
+                fetchImpl,
+              })),
+              burstIndex: 1,
+              burstCount: 1,
+            },
+          ];
 
-    const writtenFrames = [];
-    for (const frame of frames) {
+      const writtenFrames = [];
+      for (const frame of frames) {
       const frameRequestId = frame.burstCount > 1 && requestId
         ? `${requestId}:${frame.burstIndex}`
         : requestId;
@@ -123,28 +127,38 @@ export function createIngest(options = {}) {
       } else {
         writtenFrames.push({ ...written, notify: null });
       }
-    }
+      }
 
-    if (writtenFrames.length === 1) return writtenFrames[0];
-    return { frames: writtenFrames, notify: null };
+      if (writtenFrames.length === 1) return writtenFrames[0];
+      return { frames: writtenFrames, notify: null };
+    });
   }
 
   function scheduleNext() {
     if (stopped || config.once) return;
+    const backoffMs = failureStreak > 0
+      ? Math.min(config.intervalMs * (2 ** Math.min(failureStreak, 5)), 30000)
+      : config.intervalMs;
     timer = setTimeout(() => {
       void tick();
-    }, config.intervalMs);
+    }, backoffMs);
   }
 
   async function tick() {
     if (stopped) return;
     try {
       await captureOnce();
+      failureStreak = 0;
     } catch (err) {
+      failureStreak += 1;
+      const retryInMs = Math.min(config.intervalMs * (2 ** Math.min(failureStreak, 5)), 30000);
       logger.warn('ingest_capture_failed', {
         error: err instanceof Error ? err.message : String(err),
         camera: config.cameraId,
         source: config.cameraType,
+        failureStreak,
+        retryInMs,
+        requests: requestGate.metrics(),
       });
     }
     scheduleNext();
